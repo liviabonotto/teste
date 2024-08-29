@@ -1,0 +1,425 @@
+---
+title: "Análise das tabelas sku_dataset e 2024.csv"
+author: "Livia Bonotto e Gabriel Torres"
+date: "2024-08-09"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# Introdução
+
+Esse notebook fará uma primeira análise das tabelas sku_dataset (tabela
+de produto) e 2024 (tabela de transações). Essas tabelas foram
+escolhidas com o intuito de entender mais sobre a feature
+**Recomendações de cross-sell e produtos substitutos** para a criação do
+artefato da sprint 1.
+
+# Importando bibliotecas
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(ggplot2)
+library(corrplot)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(combinat)
+```
+
+# Carregando os dataframes
+
+```{r}
+df_produtos <- read_csv2("sku_dataset.csv")
+df_vendas <- read_csv("2024.csv")
+```
+
+# Visualizando os dataframes
+
+```{r}
+head(df_produtos)
+```
+
+```{r}
+head(df_vendas)
+```
+
+# Verificação da estrutura de dados
+
+```{r}
+str(df_produtos)
+```
+
+```{r}
+str(df_vendas)
+```
+
+# Resumo estatístico
+
+```{r}
+summary(df_produtos)
+```
+
+```{r}
+summary(df_vendas)
+```
+
+# Descrição das variáveis:
+
+-   **df_produtos:**
+
+    -   `cod_prod`: código único do produto.
+
+    -   `nome_abrev`: nome abreviado do produto.
+
+    -   `nome_completo`: nome completo do produto.
+
+    -   `descricao`: descrição detalhada do produto.
+
+    -   `categoria`: categoria principal do produto (ex: Corpo).
+
+    -   `sub_categoria`: subcategoria do produto (ex: Sabonete líquido).
+
+    -   `marca`: marca do produto.
+
+    -   `conteudo_valor`: valor da medida do produto (ex: 1ml, 2L, 3mg).
+
+    -   `conteudo_medida`: unidade de medida do conteúdo (ex: ml, L,
+        mg).
+
+-   **df_vendas:**
+
+    -   `data`: data da transação.
+
+    -   `cod_vendedor`: código do vendedor.
+
+    -   `cod_loja`: código da loja.
+
+    -   `cod_transacao`: código único da transação.
+
+    -   `quantidade`: quantidade vendida do produto.
+
+    -   `cod_prod`: código do produto vendido.
+
+    -   `preco`: preço de venda do produto.
+
+# Análise univariada
+
+## Histograma da quantidade de produtos vendidos pelo valor da transação
+
+Aqui criamos visualizações para explorar as distribuições da variável
+`preco` e sua frequência no dataframe. Para isto, criamos um
+`df_agregado` que soma todos os valores de transações que se repetem no
+dataframe. Após isso, colocamos eles em uma faixa de valor financeiro e
+verificamos qual é o valor que é feito nas vendas.
+
+```{r}
+df_agregado <- df_vendas %>%
+  group_by(cod_transacao) %>%
+  summarise(total_preco = sum(preco, na.rm = TRUE))
+
+max_valor <- max(df_agregado$total_preco, na.rm = TRUE)
+intervalo <- 500  # Definindo o intervalo das faixas
+
+max_valor_ajustado <- ceiling(max_valor / intervalo) * intervalo
+
+
+df_faixa <- df_agregado %>%
+  mutate(faixa_preco = case_when(
+    total_preco > 10000 ~ "10000+",
+    TRUE ~ cut(total_preco,
+               breaks = seq(0, max_valor_ajustado, by = intervalo),
+               include.lowest = TRUE,
+               right = FALSE,
+               labels = paste(seq(0, max_valor_ajustado - intervalo, by = intervalo), 
+                              seq(intervalo, max_valor_ajustado, by = intervalo), sep = "-"))
+  ))
+
+#transformar faixa_preco em fator e ordenar níveis
+df_faixa <- df_faixa %>%
+  mutate(faixa_preco = factor(faixa_preco, levels = c(paste(seq(0, max_valor_ajustado - intervalo, by = intervalo), 
+                                                            seq(intervalo, max_valor_ajustado, by = intervalo), sep = "-"),
+                                                     "10000+")))
+
+#contagem de transações por faixa de preço
+contagem_faixa <- df_faixa %>%
+  count(faixa_preco)
+
+#criando o gráfico de colunas
+ggplot(contagem_faixa, aes(x = faixa_preco, y = n)) +
+  geom_col(fill = "steelblue") +
+  labs(x = "Faixa de Preço", y = "Quantidade de transações", title = "Distribuição de transações por faixa de preço") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle =45,hjust=1))
+
+```
+
+Com base nisso, é possível perceber que a maioria das transações tem
+como valor final entre 2000-2500, seguido de 1500-2000. Enquanto isso,
+os valores mais baixos são os de 0-500 e 9500-10000. Pensando no valor
+dessas transações, é possível analisar que talvez, a maioria das
+transações são para revenda (B2B).
+
+```{r}
+media_valor_transacoes <- mean(df_faixa$total_preco, na.rm = TRUE)
+print(media_valor_transacoes)
+```
+
+## Identificando outliers no preço dos produtos
+
+```{r}
+estatisticas <- df_agregado %>%
+  summarise(
+    Q1 = quantile(total_preco, 0.25, na.rm = TRUE),
+    Q3 = quantile(total_preco, 0.75, na.rm = TRUE),
+    IQR = IQR(total_preco, na.rm = TRUE)
+  )
+
+# colocando limites para identificar outliers
+limite_inferior <- estatisticas$Q1 - 1.5 * estatisticas$IQR
+limite_superior <- estatisticas$Q3 + 1.5 * estatisticas$IQR
+
+df_outliers <- df_agregado %>%
+  mutate(
+    outlier = total_preco < limite_inferior | total_preco > limite_superior
+  )
+
+
+outliers_resumo <- df_outliers %>%
+  filter(outlier) %>%
+  summarise(
+    total_outliers = n(),
+    valor_minimo_outlier = min(total_preco, na.rm = TRUE),
+    valor_maximo_outlier = max(total_preco, na.rm = TRUE)
+  )
+
+print(outliers_resumo)
+
+# gráfico para vermos os outliers
+ggplot(df_outliers, aes(x = "", y = total_preco)) +
+  geom_boxplot(fill = "lightblue", color = "black") +
+  geom_jitter(aes(color = outlier), width = 0.2, size = 2) +
+  labs(x = "", y = "total de preço", title = "Distribuição de preços das transações com outliers destacados") +
+  theme_minimal() +
+  scale_color_manual(values = c("black", "red"), labels = c("não outlier", "outlier"))
+
+```
+
+Consideramos como outliers os valores de preço acima de 7.000. Isso faz
+sentido, dado que a maioria das transações está concentrada na faixa de
+500 a 5.000. Para definir como lidaremos com esses outliers, será
+necessário discutir novamente com o parceiro, visando compreender melhor
+o modelo de vendas desejado pela CosmeticsCo. Em uma empresa B2B em
+crescimento, por exemplo, pode ser mais apropriado valorizar os outliers
+altos, em vez de simplesmente excluí-los.
+
+# Análise bivariada
+
+## Gráfico de barras para explorar a relação entre categoria e preço médio
+
+```{r}
+df_prod_vendas <- merge(df_vendas, df_produtos, by = "cod_prod")
+df_categoria_preco <- aggregate(preco ~ categoria, data = df_prod_vendas, FUN = mean)
+ggplot(df_categoria_preco, aes(x = reorder(categoria, -preco), y = preco)) + geom_bar(stat = "identity", fill = "lightgreen", color = "black") + labs(title = "Preço médio por categoria", x = "categoria", y = "preço médio") + coord_flip()
+```
+
+Percebemos que a categoria `corpo` tem disparadamente um preço médio
+maior que as outras categorias. Essa análise é importante para o futuro
+do modelo de cross-sell, talvez para evitar viéses, devemos cortar parte
+das transações que tenham produto de `corpo`, assim, equiparando todas
+as categorias.
+
+## Análise de correlação
+
+Calculamos a matriz de correlação entre variáveis numéricas no dataframe
+`df_vendas` e exibimos essa matriz visualmente usando o pacote
+`corrplot`. A correlação mede a relação linear entre pares de variáveis.
+
+```{r}
+correlation_matrix <- cor(df_vendas[, sapply(df_vendas, is.numeric)])
+print(correlation_matrix)
+corrplot(correlation_matrix, method = "circle")
+```
+
+As colunas de quantidade e preço tem uma certa correlação. O que, em uma
+primeira análise, faz sentido, visto que, quanto mais produtos
+comprados, maior será o preço da transação.
+
+# Análise Multivariada
+
+```{r}
+df_vendas_numeric <- df_vendas[, sapply(df_vendas, is.numeric)]
+
+# usando prcomp pro pca
+pca_result <- prcomp(df_vendas_numeric, scale. = TRUE)
+
+# visualizando
+summary(pca_result)
+
+```
+
+```{r}
+plot(pca_result, type = "l")
+```
+
+Como conclusão dos relatórios gerados por esta análise, algumas
+hipóteses são levantadas:
+
+1.  Pode ser possível reduzir a dimensionalidade dos dados, mantendo
+    apenas os componentes principais que explicam a maior parte da
+    variabilidade. Se mantivermos apenas os 3 primeiros PCs, teriamos
+    84,02% da variabilidade.
+
+2.  Mantendo os dois primeiros PCs, conseguiriamos diminuir bastante a
+    dimensionalidade e ainda teríamos cerca de 59% da variabilidade.
+
+# Cross-sell e Produtos substitutos
+
+## Primeira Análise
+
+Em um primeiro momento, decidimos avançar com a proposta da feature de
+`Cross-sell e produtos substitutos` . Para os produtos substitutos,
+estamos a estratégia atual foi agrupar categorias e subcategorias,
+sugerindo os produtos mais vendidos dentro da mesma subcategoria do
+produto original. Essa estratégia deve mudar para a próxima sprint e o
+motivo disto, está nas conclusões.
+
+```{r}
+
+# primeiro, agrupando por código de transação, listamos os produtos comprados juntos (na mesma transação)
+produtos_juntos <- df_vendas %>%
+  group_by(cod_transacao) %>%
+  summarise(cod_prod = list(cod_prod))
+
+# depois criamos uma função para gerar combinações de pares de produtos, limitando o tamanho do vetor (porque quando não limitamos, passa do tamanho máximo. Temos que ver isso para as próximas sprints)
+generate_pairs <- function(produtos) {
+  if (length(produtos) > 1 && length(produtos) <= 50) {  
+    return(as.data.frame(t(combn(produtos, 2))))
+  } else {
+    return(NULL)
+  }
+}
+
+# procuramos combinacoes de produtos comprados juntos
+cross_sell_pairs <- produtos_juntos %>%
+  pull(cod_prod) %>%
+  map_df(generate_pairs)
+
+# renomeamos as colunas pra prod1 e prod2
+names(cross_sell_pairs) <- c("prod1", "prod2")
+
+# contagem das combinações mais frequentes
+cross_sell_df <- cross_sell_pairs %>%
+  count(prod1, prod2, name = "frequency") %>%
+  arrange(desc(frequency))
+
+
+# para identificar produtos substitutos, faremos um merge para trazer informacoes como categoria e subcategoria dos produtos no dataframe
+
+df_vendas_produtos <- df_vendas %>%
+  left_join(df_produtos, by = "cod_prod")
+
+# agrupamos por categoria e subcategoria, e contamos transações onde diferentes produtos apareceram
+substitutos_df <- df_vendas_produtos %>%
+  group_by(categoria, sub_categoria, cod_transacao) %>%
+  summarise(cod_prod = list(cod_prod), .groups = "drop") %>%
+  ungroup()
+
+# encontramos combinações de produtos substitutos
+substitutos_pairs <- substitutos_df %>%
+  pull(cod_prod) %>%
+  map_df(generate_pairs)
+
+# renomeamos as colunas dos pares
+names(substitutos_pairs) <- c("produto_orig", "substituto")
+
+# contagem das combinações de substitutos mais frequentes
+substitutos_df <- substitutos_pairs %>%
+  count(produto_orig, substituto, name = "frequency") %>%
+  arrange(desc(frequency))
+
+
+
+```
+
+```{r}
+# Resultados
+print(head(cross_sell_df))
+```
+
+```{r}
+print(head(substitutos_df))
+```
+
+# Conclusão
+
+O dataframe de vendas é extremamente volumoso, com um grande número de
+transações registradas. As transações se repetem ao longo do dataframe
+por produto, então se uma transação tem mais de um produto, ela
+aparecerá em mais de uma linha (cada uma referente a um produto
+comprado). Além disso, nessas transações, é possível analisar o preço
+delas, mas em df_produto não é possível analisar o preço do produto em
+si. Ainda falando em preço, as transações atingem a média de 3000, nos
+fazendo pensar que a maioria dos produtos podem estar sendo vendidos em
+um modelo B2B. Também não há informações sobre a moeda utilizada.
+
+Em relação ao tamanho do dataframe de vendas, observamos que a aplicação
+da Análise de Componentes Principais (PCA) indica que poderíamos reduzir
+significativamente a dimensionalidade dos dados. Mantendo apenas os dois
+primeiros componentes, conseguiríamos manter 59% da variabilidade dos
+dados, o que pode ser suficiente para muitas análises, ao mesmo tempo em
+que reduzimos o volume de dados. No entanto, é necessário avaliar se
+seguir por esse caminho não significaria perder dados relevantes para as
+análises.
+
+Sobre o dataframe de produto, ele especifica mais sobre o que é aquele
+produto, tendo dados como nome abreviado, nome completo, categoria e
+subcategoria. Para a feature de cross-sell e produtos substitutos,
+podemos utilizar essas colunas como base para uma maior eficiencia da
+feature.
+
+Para a próxima sprint e desenvolvimentos posteriores, planejamos:
+
+1 - Consultar com o parceiro para entender melhor o modelo de vendas,
+assim saberemos como lidar com os outliers mais adequadamente;
+
+2 - Unir com dataframes de custo e preço de venda para ter uma visão
+mais clara sobre os preços e a lucratividade das vendas.
+
+3 - Melhorar o modelo de cross-sell e de produtos substitutos,
+entendendo com o parceiro e com os professores qual é o melhor caminho a
+ser seguido, dentre as possibilidades que pensamos:
+
+\- Devemos considerar subcategoria e aspectos mais específicos de suas
+descrições como cor, tamanho e modelo, para sugerir um produto
+substituto? Levando em consideração que quanto mais próximas as
+características do produto substituto com relação ao produto original,
+maiores as chances de não haver desistência da compra;
+
+\- Na mesma linha, devemos considerar variáveis como valor e margem de
+lucro? Oferecer um produto substituto com um valor muito acima do valor
+do produto buscado originalmente pode gerar desistência da compra,
+parcialmente ou por completo. Uma análise mais profunda pode incluir a
+sugestão de produtos com valor de custo para o cliente similar ao
+original, porém com uma margem de lucro maior.
+
+\- Aspectos geográficos devem ser levados em consideração na sugestão de
+produtos substitutos? Os produtos mais vendidos de uma região não
+necessariamente serão os mesmos que o de outra região, essa diferença
+pode acontecer inclusive entre lojas de uma mesma região, visto que
+podem existir, inclusive, influências socioeconômicas.
+
+\- Da mesma forma, podemos pensar em considerar também a sazonalidade.
+Em datas comemorativas como o dia das mães podem influências numa maior
+procura por produtos específicos, podendo ser uma boa estratégias
+recomendar produtos mais frequentemente vendidos nesses períodos.
+
+\- Por fim, um aspecto relevante para uma futura evolução do produto é a
+integração com o estoque da loja, sugerindo apenas produtos cross-sell
+ou substitutos que esteja disponíveis na loja, evitando possíveis
+constrangimentos. E caso não esteja disponível, seria possível listar as
+lojas mais próximas que possuem o produto disponível e agendar uma
+retirada na loja, garantindo que o cliente fidelize a compra com
+aquele vendedor.

@@ -1,0 +1,541 @@
+---
+title: "Exploratory Data Analysis(EDA) - SKU Cost"
+author: "Victor Carvalho"
+date: "`r format(Sys.Date(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(corrplot)
+library(FactoMineR)
+library (dplyr)
+library (tidyr)
+```
+
+# Carregamento dos dados
+
+Nessa etapa, os dados são carregados e renomeados para facilitar a análise. Os conjuntos de dados carregados foram o `sku.cost.csv`, `sku.price.csv`, `2024.csv` e `store_final.csv`. Eles foram escolhidos com o objetivo de poder ter uma análise aprofundada sobre o custo, preço e assim iniciar o esboço da margem de lucro bruto.
+
+As colunas renomeadas, foram as que são comuns entre esses conjuntos de dados, que são `data_inicio`, `data_fim` e `preco`. Esse tratamento foi feito para que a junção dos dados fosse feita de forma correta, com uma maior facilidade em identificar as colunas de cada conjunto de dados. Por exemplo, a coluna `preco` existe no conjunto `sku.price.csv` e `2024.csv`, por isso foi renomeada para `preco_catalogo` e `preco_transacao`, respectivamente, para que não houvesse conflito no entendimento ao juntar dos dados.
+
+```{r}
+pathbase_df <- "/home/victorcarvalho/Documents/Code/r/eda/data/"
+
+df_cost <- read.csv(file.path(pathbase_df, "sku_cost.csv"), sep=",")
+dim(df_cost)
+df_cost <- df_cost %>%
+  rename(
+    data_inicio_custo = data_inicio,
+    data_fim_custo = data_fim
+  )
+
+df_price <- read.csv(file.path(pathbase_df, "sku_price.csv"), sep=",")
+dim(df_price)
+df_price <- df_price %>%
+  rename(
+    preco_catalogo = preco,
+    data_inicio_preco = data_inicio,
+    data_fim_preco = data_fim
+  )
+
+df_year <- read.csv(file.path(pathbase_df, "2024.csv"), sep=",")
+dim(df_year)
+df_year <- df_year %>%
+  rename(
+    preco_transacao = preco
+  )
+
+
+df_store <- read.csv(file.path(pathbase_df, "store_final.csv"), sep=",")
+dim(df_store)
+
+df_sku <- read.csv(file.path(pathbase_df, "sku_dataset.csv"), sep=";")
+dim(df_sku)
+```
+
+# Análise Exploratória de Dados
+
+Nessa etapa, os dados são unidos para que seja possível fazer uma análise exploratória de dados. A união dos dados foi feita através do código do produto, que é a chave primária de cada conjunto de dados. A união foi feita de forma que todos os dados fossem mantidos, mesmo que não houvesse correspondência entre os conjuntos de dados. Isso foi feito para que fosse possível identificar possíveis problemas nos dados, como por exemplo, a falta de dados em um dos conjuntos. Parte da junção dos dados foi feita através do código da loja, que é a chave primária do conjunto de dados `store_final.csv`.
+
+Além disso, foi feita uma amostragem dos dados para que fosse possível fazer uma análise exploratória de forma mais rápida, já que o conjunto de dados foi grande o suficiente para ter problemas de memória RAM em ambiente local.
+
+```{r}
+merged_df <- df_cost %>%
+  inner_join(df_price, by = "cod_prod", relationship = "many-to-many") %>%
+  inner_join(df_year, by = "cod_prod", relationship = "many-to-many") %>%
+  inner_join(df_sku, by = "cod_prod") %>%
+  left_join(df_store, by = c("cod_loja" = "nome_loja"))
+
+merged_df$margem_lucro_bruto_catalogo <- ((merged_df$preco_catalogo - merged_df$custo) / merged_df$preco_catalogo) * 100
+
+merged_df$lucro_bruto_financeiro_catalogo <- ((merged_df$preco_catalogo - merged_df$custo) / merged_df$preco_catalogo)
+
+merged_df$preco_unitario_transacao <- (merged_df$preco_transacao/merged_df$quantidade)
+
+merged_df$margem_lucro_bruto_transacao <-((merged_df$preco_unitario_transacao - merged_df$custo) / merged_df$preco_unitario_transacao) * 100
+
+merged_df$lucro_bruto_financeiro_transacao <- ((merged_df$preco_unitario_transacao - merged_df$custo) / merged_df$preco_unitario_transacao)
+
+merged_df <- merged_df %>%
+  group_by(regiao) %>%
+  mutate(margem_lucro_bruto_regiao_catalogo = mean(margem_lucro_bruto_catalogo, na.rm = TRUE)) %>%
+  ungroup()
+
+head(merged_df)
+
+sampled_df <- merged_df %>% sample_frac(0.01)
+sampled_df$data_inicio_custo <- as.Date(sampled_df$data_inicio_custo)
+sampled_df$data_fim_custo <- as.Date(sampled_df$data_fim_custo)
+sampled_df$data_inicio_preco <- as.Date(sampled_df$data_inicio_preco)
+sampled_df$data_fim_preco <- as.Date(sampled_df$data_fim_preco)
+```
+
+## Características e Justificativas de Estruturação dos Dados
+
+### Estrutura e União dos Dataframes
+
+-   df_cost: Contém dados sobre o custo dos produtos, com cod_prod como chave primária e as datas de vigência do custo (data_inicio_custo, data_fim_custo).
+-   df_price: Contém informações sobre o preço de catálogo dos produtos, também com cod_prod como chave primária e as datas de vigência do preço (data_inicio_preco, data_fim_preco).
+-   df_year: Contém transações anuais, associando cod_prod ao preço transacional (preco_transacao) e outras informações como quantidade e cod_loja.
+-   df_store: Contém informações sobre as lojas, onde nome_loja é a chave primária.
+-   df_sku: Contém dados gerais sobre os produtos (cod_prod).
+
+Os dataframes foram unidos sequencialmente usando inner_join (união interna) para os dataframes df_cost, df_price, df_year, e df_sku, o que garantiu a preservação de apenas as observações comuns entre eles. Posteriormente, o dataframe resultante foi unido ao df_store usando left_join (união à esquerda) para garantir que todas as observações de produtos e transações fossem preservadas, independentemente de corresponderem a uma loja específica.
+
+### Transformações e Variáveis Derivadas
+
+-   margem_lucro_bruto_catalogo: Calculada como a margem percentual de lucro com base no preço de catálogo e no custo.
+    -   Fórmula: ((preco_catalogo - custo) / preco_catalogo) \* 100
+    -   Justificativa: A margem de lucro bruto em relação ao preço de catálogo é essencial para entender o lucro potencial de cada produto antes de ser vendido.
+-   lucro_bruto_financeiro_catalogo: Calculada como o lucro financeiro bruto (em valor monetário) sobre o preço de catálogo.
+    -   Fórmula: (preco_catalogo - custo) / preco_catalogo
+    -   Justificativa: Fornece uma visão quantitativa do lucro esperado, em termos financeiros, a partir do preço de catálogo.
+-   preco_unitario_transacao: Calculado como o preço unitário da transação.
+    -   Fórmula: preco_transacao / quantidade
+    -   Justificativa: Permite o cálculo da margem de lucro com base no preço unitário efetivo de venda.
+-   margem_lucro_bruto_transacao: Calculada como a margem percentual de lucro com base no preço de transação e no custo.
+    -   Fórmula: ((preco_unitario_transacao - custo) / preco_unitario_transacao) \* 100
+    -   Justificativa: É fundamental para avaliar a rentabilidade real das transações.
+-   lucro_bruto_financeiro_transacao: Calculada como o lucro financeiro bruto (em valor monetário) por transação.
+    -   Fórmula: (preco_unitario_transacao - custo) / preco_unitario_transacao
+    -   Justificativa: Oferece uma visão quantitativa do lucro real obtido por transação.
+-   margem_lucro_bruto_regiao_catalogo: Média da margem de lucro bruto por região baseada no preço de catálogo.
+    -   Justificativa: Fornece um indicador agregado para comparações regionais de desempenho.
+
+### Análise Completa das Variáveis
+
+**Variáveis Relacionadas ao Produto e Preço**
+
+-   preco_catalogo, preco_transacao, preco_unitario_transacao: São variáveis de preço que refletem diferentes estágios do ciclo de venda. O preco_catalogo representa o valor inicial de oferta do produto, enquanto o preco_transacao e o preco_unitario_transacao representam o valor efetivamente pago pelos consumidores.
+-   custo: Representa o custo de aquisição ou produção do produto, essencial para a análise de margem de lucro.
+
+**Variáveis Derivadas de Lucro**
+
+-   margem_lucro_bruto_catalogo, margem_lucro_bruto_transacao: Essas variáveis são críticas para avaliar o desempenho financeiro, mostrando como a rentabilidade varia entre o preço de catálogo e o preço real de venda.
+-   lucro_bruto_financeiro_catalogo, lucro_bruto_financeiro_transacao: Complementam as margens de lucro fornecendo a visão monetária do lucro bruto, o que é útil para análises mais práticas e financeiras.
+
+**Variáveis Relacionadas à Loja e Região** - regiao, nome_loja: São variáveis categóricas que permitem a agregação e comparação entre diferentes regiões e lojas, revelando padrões de desempenho geográficos.
+
+## Resumo Estatístico
+
+### Dimensões dos dados
+
+```{r}
+dim(sampled_df)
+
+```
+
+Aqui foi possível observar que o conjunto de dados amostrado possui `r nrow(sampled_df)` linhas e `r ncol(sampled_df)` colunas. Que é um tamanho razoável para fazer uma análise exploratória de dados, visto que o conjunto de dados original possui `r nrow(merged_df)` linhas e `r ncol(merged_df)` colunas.
+
+### Estrutura dos dados
+
+```{r}
+str(sampled_df)
+
+```
+
+Aqui foi possível observar a estrutura dos dados, composta por variáveis numéricas e categóricas majoritariamente, que são importantes para a análise exploratória de dados. Também existem algumas variáveis do tipo Date, que eram anteriormente de tipo char e foram convertidas com a intenção de poder analisar séries temporais e entender o comportamneto dos dados no decorrer do tempo.
+
+### Sumário Estatístico
+
+```{r}
+summary(sampled_df)
+
+```
+
+Esse sumário estatístico foi importante para entender a distribuição dos dados e identificar possíveis problemas, como por exemplo, valores faltantes, outliers e valores extremos, que podem ser observados por meio dos valores mínimos e máximos das variáveis.
+
+### Variáveis e Pontos Estratégicos
+
+Nessa etapa, foram escolhidas variáveis valiosas que merecem aprofundamento na análise, pois estrategicamente, pensando na feature de criar uma Data View de margem de lucro sobre os produtos, essas variáveis são essenciais para construir a margem e melhorar a tomada de decisão dos vendedores sobre os produtos aos quais devem focar a venda.
+
+**Variável `custo`**
+
+```{r}
+summary(sampled_df$custo)
+```
+
+-   **Tendência Central:**
+    -   O valor mínimo do custo é R\$ 6,35 e o máximo é R\$ 414,07.
+    -   A mediana (R\$ 33,56) é significativamente menor que a média (R\$ 64,12), indicando uma distribuição assimétrica à direita.
+    -   A maior parte dos custos está concentrada abaixo de R\$ 51,34 (3º quartil).
+-   **Dispersão:**
+    -   Há uma grande variação nos valores de custo, com um intervalo interquartil (IQR) de aproximadamente R\$ 27,18 (diferença entre o 1º e o 3º quartil).
+    -   O fato da média ser bem maior que a mediana sugere a presença de outliers à direita, ou seja, produtos com custos excepcionalmente altos.
+-   **Distribuição:**
+    -   A assimetria positiva na distribuição dos custos sugere que a maioria dos produtos tem custos mais baixos, enquanto poucos produtos têm custos muito elevados.
+    -   É importante identificar os produtos com custos elevados para entender o motivo dessa disparidade, como diferenciais de qualidade, exclusividade, ou outros fatores.
+
+**Variável `preco_transacao`**
+
+```{r}
+summary(sampled_df$preco_transacao)
+```
+
+-   **Tendência Central:**
+    -   O preço de transação varia de R\$ 11,33 a R\$ 3976,69, um intervalo bastante amplo.
+    -   A mediana é de R\$ 214,65, enquanto a média é de R\$ 374,61, indicando também uma distribuição assimétrica à direita.
+-   **Dispersão:**
+    -   O IQR é de R\$ 293,60, o que mostra uma dispersão significativa dos preços de transação.
+    -   A alta diferença entre o 3º quartil (R\$ 400,93) e o valor máximo (R\$ 3976,69) indica a presença de outliers que podem estar distorcendo a média para cima.
+-   **Distribuição:**
+    -   A maioria das transações ocorre em faixas de preço mais baixas, mas há algumas transações com preços extremamente altos que afetam a média geral.
+    -   Esses outliers podem ser transações especiais, produtos premium, ou podem indicar inconsistências nos dados que merecem investigação adicional.
+
+**Variável `margem_lucro_bruto`**
+
+```{r}
+summary(sampled_df$margem_lucro_bruto_transacao)
+```
+
+-   **Tendência Central:**
+    -   A margem de lucro bruto por transação varia de -30,35% (indicando perda) até 72,46%.
+    -   A mediana (38,40%) está muito próxima da média (38,24%), sugerindo uma distribuição simétrica da margem de lucro.
+-   **Dispersão:**
+    -   O IQR é de 18,09%, o que indica uma variação relativamente menor nas margens de lucro bruto em comparação com as variáveis anteriores.
+    -   A margem negativa mínima sugere que há algumas transações em que o custo foi maior do que o preço de venda, resultando em prejuízo.
+-   **Distribuição:**
+    -   A simetria da distribuição indica uma consistência nas margens de lucro, com a maioria das transações sendo lucrativas, embora haja algumas perdas.
+    -   É crucial analisar as transações com margens negativas para entender se isso é devido a descontos, promoções, erro de precificação ou outros fatores.
+
+## Análise Univariada
+
+### Visualização das distribuições
+
+**Distribuição do Custo**
+
+```{r}
+ggplot(sampled_df, aes(x = custo)) + geom_histogram(binwidth = 1, fill = "#20B2AA") + 
+    labs(title = "Distribuição do Custo", x = "Custo", y = "Frequência")
+
+```
+
+Na distribuição do custo, é possível observar que a maior parte dos produtos possuem um custo entre 0 e 60, o que é um custo razoável para um produto de uma empresa de cosméticos. Porém, existem alguns produtos que possuem um custo muito alto(chegando a até 400), o que pode ser um problema, pois pode indicar que o produto é muito caro para ser produzido, a depender de seu preço.
+
+**Distribuição do Preço de Catálogo**
+
+```{r}
+ggplot(sampled_df, aes(x = preco_catalogo)) + geom_histogram(binwidth = 1, fill = "#20B2AA") + 
+    labs(title = "Distribuição do Preço de Catálogo", x = "Preço de Catálogo", y = "Frequência")
+
+```
+
+Na distribuição do preço de catálogo, é possível observar que a maior parte dos produtos possuem um preço entre 0 e 100, o que é um valor razoável para um produto. Porém, existem alguns produtos que possuem um preço muito alto, o que pode ser um problema, pois pode indicar que o produto tem um valor muito maior do que a média das pessoas compram, porém, por ter uma baixa frequência também pode ser somente um produto de "luxo".
+
+**Distribuição da Margem de Lucro Bruto**
+
+```{r}
+ggplot(sampled_df, aes(x = margem_lucro_bruto_catalogo)) + geom_histogram(binwidth = 1, fill = "#20B2AA") + 
+    labs(title = "Distribuição da Margem de Lucro Bruto", x = "Margem de Lucro Bruto", y = "Frequência")
+
+```
+
+A distribuição da margem de lucro bruto é uma das mais importantes, pois é a variável que será utilizada para a tomada de decisão dos vendedores. É possível observar que a maior parte dos produtos possuem uma margem de lucro entre 10 e 60, o que é um valor razoável para um produto. Porém, existem alguns produtos que possuem uma margem de lucro muito baixa, o que pode ser um problema, pois pode indicar que o produto é muito caro para ser produzido, ou seja, tem um custo muito alto em relação ao preço.
+
+### Identificação de Outliers
+
+**Identificação de Outliers no Preço**
+
+```{r}
+ggplot(sampled_df, aes(x = cod_prod, y = preco_catalogo)) +
+  geom_point() +
+  labs(title = "Visualização de Outliers no Preço", x = "Código do Produto", y = "Preço")
+```
+
+**Identificação de Outliers no Custo**
+
+```{r}
+ggplot(sampled_df, aes(x = cod_prod, y = custo)) +
+  geom_point() +
+  labs(title = "Visualização de Outliers no Custo", x = "Código do Produto", y = "Custo`")
+```
+
+Nesses dois gráfico de dispersão, é possível observar que existem alguns custos que fogem do padrão e podem ser considerados Outliers, já que estão significativamente acima da maioria dos outros pontos, que indicam produtos com custos muito maiores que a maioria dos outros, que se concentram em um intervalo de custo entre 0 e 100 R\$. No sentido de preços, foi possível observar que a maior parte dos produtos tem preço entre 0 e 200 R\$ e que existem alguns produtos com preços muito altos, que podem ser considerados Outliers também.
+
+Algumas suposições podem justificar esses Outliers, como:
+
+-   Produtos específicos naturalmente mais caros(Exemplo: Produtos Dior).
+
+-   Erros de entrada de dados.
+
+## Análise Bivariada
+
+### Relação entre Preço de Venda e Custo Unitário
+
+```{r}
+ggplot(sampled_df, aes(x = custo, y = preco_catalogo)) +
+  geom_point(color = 'red') +
+  geom_smooth(method = 'lm', se = FALSE, color = 'blue') +
+  labs(title = 'Relação entre Preço de Venda e Custo Unitário', x = 'Custo Unitário', y = 'Preço de Venda')
+```
+
+### Relação entre Margem de Lucro Bruto(Transação) e Região
+
+```{r}
+media_margem_por_regiao <- sampled_df %>%
+  group_by(regiao) %>%
+  summarise(margem_media = mean(margem_lucro_bruto_transacao, na.rm = TRUE))
+
+ggplot(media_margem_por_regiao, aes(x = margem_media, y = reorder(regiao, margem_media))) +
+  geom_col(fill = "darkblue") +
+  geom_text(aes(label = round(margem_media, 2)), 
+            hjust = 1.1, 
+            color = "white") +
+  labs(title = "Média de Margem de Lucro Bruto por Região", 
+       x = "Média de Margem de Lucro Bruto (%)", 
+       y = "Região") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(size = 16, face = "bold")) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1)))
+```
+
+### Relação entre Margem de Lucro Bruto(Transação) e Subcategoria
+
+```{r}
+media_margem_por_categoria <- sampled_df %>%
+  group_by(sub_categoria) %>%
+  summarise(margem_media = mean(margem_lucro_bruto_catalogo, na.rm = TRUE))
+
+ggplot(media_margem_por_categoria, aes(x = margem_media, y = reorder(sub_categoria, margem_media))) +
+  geom_col(fill = "darkblue") +
+  geom_text(aes(label = round(margem_media, 2)), 
+            hjust = 1.1, 
+            color = "white") +
+  labs(title = "Média de Margem de Lucro Bruto por Subcategoria", 
+       x = "Média de Margem de Lucro Bruto (%)", 
+       y = "Subcategoria") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12),
+        axis.title = element_text(size = 14),
+        plot.title = element_text(size = 16, face = "bold")) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.1))) 
+```
+
+### Relação entre Margem de Lucro Bruto(Transação) e Categoria
+
+```{r}
+margem_lucro_bruto_categoria <- sampled_df %>%
+  group_by(categoria) %>%
+  summarise(media_margem = mean(margem_lucro_bruto_transacao, na.rm = TRUE))
+
+ggplot(margem_lucro_bruto_categoria, aes(x = media_margem, y = reorder(categoria, media_margem))) +
+  geom_col(fill = "darkblue") +
+  geom_text(aes(label = round(media_margem, 2)), hjust = 1.1, color = "white") +
+  labs(x = "Média da Margem de Lucro Bruta (%)", y = "Categoria", 
+       title = "Média da Margem de Lucro Bruta por Categoria") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### Relação entre Custo e Categoria
+
+```{r}
+media_custo_categoria <- sampled_df %>%
+  group_by(categoria) %>%
+  summarise(media_custo = mean(custo, na.rm = TRUE))
+
+ggplot(media_custo_categoria, aes(x = reorder(categoria, media_custo), y = media_custo)) +
+  geom_col(fill = "#20B2AA") +
+  coord_flip() +
+  geom_text(aes(label = round(media_custo, 2)), hjust = 1.1, color = "white") +
+  labs(title = "Média do Custo por Categoria",
+       x = "Categoria",
+       y = "Média do Custo") +
+  theme_minimal()
+```
+
+### Relação entre Média de Custo e Subcategoria
+
+```{r}
+media_custo_categoria <- sampled_df %>%
+  group_by(sub_categoria) %>%
+  summarise(media_custo = mean(custo, na.rm = TRUE))
+
+ggplot(media_custo_categoria, aes(x = reorder(sub_categoria, media_custo), y = media_custo)) +
+  geom_col(fill = "#20B2AA") +
+  coord_flip() +
+  geom_text(aes(label = round(media_custo, 2)), hjust = 1.1, color = "white") +
+  labs(title = "Média do Custo por Subcategoria",
+       x = "Subategoria",
+       y = "Média do Custo") +
+  theme_minimal()
+```
+
+### Relação entre Média de Custo e Região
+
+```{r}
+media_custo_regiao <- sampled_df %>%
+  group_by(regiao) %>%
+  summarise(media_custo = mean(custo, na.rm = TRUE))
+
+ggplot(media_custo_regiao, aes(x = reorder(regiao, media_custo), y = media_custo)) +
+  geom_col(fill = "#20B2AA") +
+  coord_flip() +
+  geom_text(aes(label = round(media_custo, 2)), hjust = 1.1, color = "white") +
+  labs(title = "Média do Custo por Região",
+       x = "Região",
+       y = "Média do Custo") +
+  theme_minimal()
+```
+
+### Relação entre Média de Preço(Transação) e Categoria
+
+```{r}
+media_preco_categoria <- sampled_df %>%
+  group_by(categoria) %>%
+  summarise(media_preco = mean(preco_transacao, na.rm = TRUE))
+
+ggplot(media_preco_categoria, aes(x = reorder(categoria, media_preco), y = media_preco)) +
+  geom_col(fill = "purple") +
+  coord_flip() +
+  geom_text(aes(label = round(media_preco, 2)), hjust = 1.1, color = "white") +
+  labs(title = "Média do Preço por Categoria",
+       x = "Categoria",
+       y = "Média do Preço") +
+  theme_minimal()
+```
+
+### Relação entre Média de Preço(Transação) e Subcategoria
+
+```{r}
+media_preco_categoria <- sampled_df %>%
+  group_by(sub_categoria) %>%
+  summarise(media_preco = mean(preco_transacao, na.rm = TRUE))
+
+ggplot(media_preco_categoria, aes(x = reorder(sub_categoria, media_preco), y = media_preco)) +
+  geom_col(fill = "purple") +
+  coord_flip() +
+  geom_text(aes(label = round(media_preco, 2)), hjust = 1.1, color = "white") +
+  labs(title = "Média do Preço por Subcategoria",
+       x = "Subcategoria",
+       y = "Média do Preço") +
+  theme_minimal()
+```
+
+### Relação entre Média de Preço(Transação) e Região
+
+```{r}
+media_preco_regiao <- sampled_df %>%
+  group_by(regiao) %>%
+  summarise(media_preco = mean(preco_transacao, na.rm = TRUE))
+
+ggplot(media_preco_regiao, aes(x = reorder(regiao, media_preco), y = media_preco)) +
+  geom_col(fill = "purple") +
+  coord_flip() +
+  geom_text(aes(label = round(media_preco, 2)), hjust = 1.1, color = "white") +
+  labs(title = "Média do Preço(Transação) por Região",
+       x = "Região",
+       y = "Média de Preço") +
+  theme_minimal()
+```
+
+## Análise de Correlação
+
+```{r}
+numeric_columns <- sapply(sampled_df, is.numeric)
+dataframe_numeric <- sampled_df[, numeric_columns]
+
+correlation <- cor(dataframe_numeric)
+
+corrplot(correlation, method = "circle")
+```
+
+A forma de interpretar essa metriz de correlação consiste em círculos grandes e escuros, que indicam uma correlação mais forte, em que A cor azul escura indica uma correlação positiva forte (+1), enquanto uma cor vermelha indicaria uma correlação negativa forte (-1). Já círculos menores e mais claros indicam correlações mais fracas, próximas de 0, significando pouca ou nenhuma relação linear entre as variáveis.
+
+**Correlação entre Variáveis**
+
+-   Diagonal Principal: Sempre tem correlação 1, pois é a correlação de uma variável consigo mesma.
+-   custo e preco_catalogo: Parece haver uma correlação positiva forte (círculo azul escuro), o que sugere que produtos com custos mais altos tendem a ter preços de catálogo mais altos.
+-   quantidade e preco_transacao: O círculo parece pequeno e claro, indicando uma correlação fraca ou inexistente, o que sugere que a quantidade vendida pode não estar fortemente relacionada ao preço da transação.
+-   margem_lucro_bruto e custo: Se o círculo for pequeno e vermelho, isso indicaria uma correlação negativa, sugerindo que à medida que o custo aumenta, a margem de lucro bruto diminui.
+
+É importante mencionar que correlação não implica causalidade e que uma correlação forte entre duas variáveis não significa que uma causa a outra. Além disso, correlações muito baixas ou muito altas devem ser investigadas para entender possíveis outliers ou relações não lineares.
+
+## Análise Multivariada
+
+```{r}
+pca_data <- sampled_df[, numeric_columns]
+
+normalized_pca_data <- scale(pca_data)
+
+pca_result <- prcomp(normalized_pca_data, center = TRUE, scale. = TRUE)
+summary(pca_result)
+
+```
+
+### Desvio Padrão (Standard Deviation)
+
+-   O desvio padrão de cada componente principal é uma medida da quantidade de variância capturada por esse componente.
+-   O primeiro componente principal (PC1) tem o maior desvio padrão (2.1469), o que indica que ele captura a maior quantidade de variância nos dados.
+-   À medida que avançamos para os componentes subsequentes, o desvio padrão diminui, indicando que cada componente adicional captura menos variância.
+-   Os últimos componentes (PC11, PC12, PC13) têm desvios padrão muito baixos, chegando até números muito próximos de zero (como PC12 e PC13 com desvios padrão na ordem de 10 elevado a -16 ). Isso significa que esses componentes praticamente não contribuem para a variância total dos dados.
+
+### Proporção de Variância (Proportion of Variance)
+
+-   Esta métrica indica a proporção da variância total que é capturada por cada componente.
+-   O PC1 captura 35,45% da variância total dos dados, sendo o componente mais informativo.
+-   O PC2 captura 22,03% da variância total, contribuindo significativamente para a explicação da variação nos dados.
+-   Os primeiros cinco componentes (PC1 a PC5) juntos capturam cerca de 81,99% da variância total, o que indica que a maioria da informação contida nos dados originais pode ser explicada por esses cinco componentes.
+-   A partir do PC6, a contribuição de cada componente começa a diminuir consideravelmente. Por exemplo, o PC10 captura apenas 0,059% da variância total, enquanto PC11 captura 0,035%, e os últimos componentes (PC12 e PC13) não capturam variação alguma (0%).
+
+### Proporção Cumulativa (Cumulative Proportion)
+
+-   Esta coluna mostra a soma cumulativa das proporções de variância capturadas por todos os componentes até aquele ponto. O PC1 sozinho captura 35,45% da variância total.
+-   Os dois primeiros componentes juntos (PC1 e PC2) capturam 57,49% da variância.
+-   Com os primeiros cinco componentes, atingimos cerca de 81,99% de explicação da variância, o que geralmente seria considerado suficiente para representar os dados de forma eficaz, dependendo do contexto e do objetivo da análise.
+-   Ao incluir o sétimo componente (PC7), alcançamos 96,39% da variância explicada, e com o nono componente (PC9) esse valor sobe para 99,91%.
+-   Os componentes 10, 11, 12 e 13 não acrescentam valor significativo, pois a variância cumulativa já chega a 100%.
+
+### O que tudo isso que dizer?
+
+-   Dado que os primeiros cinco componentes (PC1 a PC5) explicam quase 82% da variância nos dados, é possível considerar reduzir o conjunto de dados para apenas esses componentes ao invés de manter todas as 13 variáveis originais. Isso pode simplificar a análise e reduzir o ruído sem perder muita informação.
+-   Componentes Irrelevantes: Os componentes do PC10 ao PC13 são praticamente irrelevantes para a modelagem, já que eles não capturam variância adicional significativa e eles poderiam ser descartados sem comprometer a explicação dos dados.
+
+## Representação Gráfica dos dados
+
+## Discovery
+
+A média de lucro bruto em produtos de catálogo se demonstrou ser de `r round(mean(sampled_df$margem_lucro_bruto_catalogo), digits = 2)`%, o que é um valor razoável para um produto. Porém, é importante observar que existem produtos com margens de lucro muito baixas, o que pode ser um problema, pois pode indicar que o produto é muito caro para ser produzido, ou seja, tem um custo muito alto em relação ao preço.
+
+```{r}
+mean_gross_profit_margin_catalog <- mean(sampled_df$margem_lucro_bruto_catalogo)
+paste(round(mean_gross_profit_margin_catalog, digits = 2), "%", sep="")
+
+```
+
+Já na média de lucro bruto em produtos com o preço da transação executada de fato se demonstrou ser de `r round(mean(sampled_df$margem_lucro_bruto_transacao), digits = 2)`%, o que é um valor razoável para um produto, que pode ter uma problemática semelhante com a média de lucro bruto em produtos de catálogo.
+
+```{r}
+mean_gross_profit_margin_transaction <- mean(sampled_df$margem_lucro_bruto_transacao)
+paste(round(mean_gross_profit_margin_transaction, digits = 2), "%", sep="")
+
+```
+
+Além disso, foi possível observar que os produtos de categoria Labios, Olhos e Cabelo possuem uma maior margem de lucro bruto em relação aos produtos de outras categorias, o que pode indicar que esses produtos são mais lucrativos para a empresa. Por outro lado, os produtos de categoria Rosto e Pele possuem uma margem de lucro bruto menor, o que pode indicar que esses produtos são menos lucrativos para a empresa. Pensando nas subcategorias, Sombra, Batom, Hidratante, Sabonete, Corretivo e Gloss foram os produtos que se destacaram com uma margem de lucro bruto maior, que mostra correlação com as categorias de maior margem também.
+
+É interessante observar que os produtos de maior margem são os de maior preço, já que os de maior preço são das categorias Corpo e Cuidados com a Pele, porém, eles possuem um custo tão grande quanto seus preços, o que explica o motivo de uma menor margem.
+
+Em relação as margens de lucro por região, é possível observar que Rio de Janeiro, SP Capital(Leste e Oeste) e SP Interior possuem uma maior margem de lucro bruto em relação às outras regiões, o que pode indicar que essas regiões são mais lucrativas para a empresa e pode ser explicado por políticas de desconto locais, impostos que são descontados ou até mesmo por serem regiões de custo de vida menor. Por outro lado, as regiões de SP Capital(Sul e Norte), Minas Gerais e Paraná possuem uma margem de lucro bruto menor, o que pode indicar que essas regiões são menos lucrativas para a empresa. Isso tem correlação direta com o preço e custo, que nas regiões de menor margem tem um custo extremamente elevado e mesmo que o preço também seja, proporcionalmente as que obtiveram melhor margem tem um custo menor que seu preço.

@@ -1,0 +1,443 @@
+---
+title: "Análise Exploratória - Classificação das melhores lojas no mês atual"
+author: "Beatriz"
+output:
+  html_document:
+    df_print: paged
+---
+
+## 1. Carregamento e preparação dos dados
+
+### Carregamento das bibliotecas
+
+```{r}
+
+library(tidyverse)
+library(GGally)
+library(corrplot)
+library(gridExtra)
+library(readxl)
+library(FactoMineR)
+library(factoextra)
+library(dplyr)
+
+```
+
+### Carregamento dos dados e visualização das primeiras linhas
+
+```{r}
+
+transaction_faction_v3_2024 <- read.csv(file = './database-projeto-M11/transactions/transaction_fact_v3_2024.csv')
+
+# Exibir primeiras linhas 
+
+head(transaction_faction_v3_2024)
+
+```
+
+```{r}
+
+dados1 <- read.csv(file = './database-projeto-M11/transactions/2024-1.csv')
+
+# Exibir primeiras linhas
+
+head(dados1)
+
+```
+
+### Verificação da estrutura de dados
+
+```{r}
+
+str(transaction_faction_v3_2024)
+
+```
+
+```{r}
+
+str(dados1)
+
+```
+
+## 2. Resumo Estatístico e Descrição dos Dados
+
+### Resumo estatístico
+
+```{r}
+
+summary(transaction_faction_v3_2024)
+
+```
+
+```{r}
+
+summary(dados1)
+
+```
+
+### Verificar dados faltantes
+
+```{r}
+
+sum(is.na(transaction_faction_v3_2024))
+
+```
+
+```{r}
+
+sum(is.na(dados1))
+
+```
+
+### Descrição dos dados
+
+-   data: dia, mês e ano das vendas de cada produto em todas as lojas;
+-   cod_vendedor: código de identificação de cada vendedor;
+-   cod_loja: código de identificação de cada loja;
+-   cod_transacao: código de identificação de cada transição feita na loja;
+-   quantidade: quantidade de produtos vendidos em cada uma das lojas naquela data específica;
+-   cod_prod: código de identificação do produto vendido;
+-   preco: preço do produto vendido.
+
+## 3. Análise Univariada
+
+### Visualização das distribuições
+
+Aqui criei uma coluna "Estado" para as transações. Com isso, fiz um histograma de cada estado que tem uma loja da CosmeticsCo.
+
+```{r}
+
+# Quantidade de vendas por loja em MG
+
+data <- dados1 %>% 
+  mutate(estado = substr(cod_loja, 1, 2))
+
+data_mg <- filter(data, estado == 'MG')
+
+ggplot(data_mg, aes(x = cod_loja)) +
+  geom_bar(stat = "count", fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Quantidade de vendas por loja em MG", x = "Loja", y = "Quantidade")
+
+```
+
+```{r}
+
+# Quantidade de vendas por loja em RJ
+
+data_rj <- filter(data, estado == 'RJ')
+
+ggplot(data_rj, aes(x = cod_loja)) +
+  geom_bar(stat = "count", fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Quantidade de vendas por loja em RJ", x = "Loja", y = "Quantidade")
+
+```
+
+-   Aqui adicionei também um ranking com a quantidade de vendas por loja em SP
+
+```{r}
+
+# Quantidade de vendas por loja em SP
+
+data_sp <- filter(data, estado == 'SP')
+
+ranking_sp <- data_sp %>% 
+  group_by(cod_loja) %>% 
+  summarise(Quantidade = n(), .groups = 'drop') %>% 
+  arrange(desc(Quantidade))
+
+print(head(ranking_sp))
+
+ggplot(data_sp, aes(x = cod_loja)) +
+  geom_bar(stat = "count", fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Quantidade de vendas por loja em SP", x = "Loja", y = "Quantidade")
+
+```
+
+```{r}
+
+# Quantidade de vendas por loja em PR
+
+data_pr <- filter(data, estado == 'PR')
+
+ggplot(data_pr, aes(x = cod_loja)) +
+  geom_bar(stat = "count", fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Quantidade de vendas por loja em PR", x = "Loja", y = "Quantidade")
+
+ranking_pr <- data_pr %>% 
+  group_by(cod_loja) %>% 
+  summarise(Quantidade = n(), .groups = 'drop') %>% 
+  arrange(desc(Quantidade))
+
+print(head(ranking_pr))
+
+```
+
+```{r}
+
+# Quantidade de vendas por loja em RS
+
+data_rs <- filter(data, estado == 'RS')
+
+ggplot(data_rs, aes(x = cod_loja)) +
+  geom_bar(stat = "count", fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Quantidade de vendas por loja em RS", x = "Loja", y = "Quantidade")
+
+ranking_rs <- data_rs %>% 
+  group_by(cod_loja) %>% 
+  summarise(Quantidade = n(), .groups = 'drop') %>% 
+  arrange(desc(Quantidade))
+
+print(head(ranking_rs))
+```
+
+```{r}
+
+data_sc <- filter(data, estado == 'SC')
+
+ggplot(data_sc, aes(x = cod_loja)) +
+  geom_bar(stat = "count", fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Quantidade de vendas por loja em SC", x = "Loja", y = "Quantidade")
+
+ranking_sc <- data_sc %>% 
+  group_by(cod_loja) %>% 
+  summarise(Quantidade = n(), .groups = 'drop') %>% 
+  arrange(desc(Quantidade))
+
+print(head(ranking_sc))
+
+```
+
+```{r}
+
+data_agrupada <- data %>%
+  group_by(cod_transacao) %>%
+  summarise(
+    total_quantidade = sum(quantidade),
+    total_preco = sum(preco),
+    .groups = 'drop'
+  )
+
+# Ajustando o valor máximo e definindo intervalos
+
+max_valor <- max(data_agrupada$total_preco, na.rm = TRUE)
+
+intervalo <- 500  
+max_valor_ajustado <- ceiling(max_valor / intervalo) * intervalo
+
+# Categorizando os preços em faixas
+
+data_agrupada <- data_agrupada %>%
+  mutate(faixa_preco = case_when(
+    total_preco > 10000 ~ "10000+",
+    TRUE ~ cut(total_preco,
+               breaks = seq(0, max_valor_ajustado, by = intervalo),
+               include.lowest = TRUE,
+               right = FALSE,
+               labels = paste(seq(0, max_valor_ajustado - intervalo, by = intervalo), 
+                              seq(intervalo, max_valor_ajustado, by = intervalo), sep = "-"))
+  ))
+
+# Transformando faixa_preco em fator e ordenando níveis
+
+data_agrupada <- data_agrupada %>%
+  mutate(faixa_preco = factor(faixa_preco, levels = c(paste(seq(0, max_valor_ajustado - intervalo, by = intervalo), 
+                                                            seq(intervalo, max_valor_ajustado, by = intervalo), sep = "-"),
+                                                     "10000+")))
+
+# Contagem de transações por faixa de preço
+
+contagem_faixa <- data_agrupada %>%
+  count(faixa_preco)
+
+# Criando o gráfico de colunas
+
+ggplot(contagem_faixa, aes(x = faixa_preco, y = n)) +
+  geom_col(fill = "blue") +
+  labs(x = "Faixa de Preço", y = "Quantidade de transações", title = "Distribuição de transações por faixa de preço") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+Q1 <- quantile(data_agrupada$total_preco, 0.25)
+Q3 <- quantile(data_agrupada$total_preco, 0.75)
+IQR <- Q3 - Q1
+
+# Definindo os limites para outliers
+
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+# Identificando os valores específicos que são considerados outliers
+
+outliers <- data_agrupada$total_preco[data_agrupada$total_preco < lower_bound | data_agrupada$total_preco > upper_bound]
+
+# Resultados
+
+cat("Lower Bound for Outliers:", lower_bound, "\n")
+cat("Upper Bound for Outliers:", upper_bound, "\n")
+```
+
+```{r}
+
+ggplot(data_agrupada, aes(y = total_preco)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Boxplot dos Preços Totais", y = "Preço Total (R$)") +
+  theme_minimal() +
+  geom_hline(yintercept = lower_bound, color = "red", linetype = "dashed") +  
+  
+  geom_hline(yintercept = upper_bound, color = "green", linetype = "dashed")  
+
+```
+
+O boxplot dos preços totais mostra que a maioria das transações possui preços relativamente moderados, Porém, há uma quantidade significativa de outliers representados pelos pontos acima do whisker superior, sugerindo a presença de várias transações com valores muito mais altos que o restante.
+
+É interessante analisar o porque esses outliers estão conseguindo números tão elevados, isso pode ser algo que pode ser usado como exemplo para outras lojas.
+
+## 4. Análise bivariada
+
+### Visualização dos gráficos do valor das transações por estado
+
+```{r}
+data$estado <- str_extract(data$cod_loja, "^[A-Z]{2}")
+
+# Agregando os dados para somar os valores por estado
+
+dados_agregados <- data %>%
+  group_by(estado) %>%
+  summarise(total_vendas = sum(preco, na.rm = TRUE))
+
+# Criando o gráfico de colunas
+
+ggplot(dados_agregados, aes(x = estado, y = total_vendas, fill = estado)) +
+  geom_col() +
+  labs(title = "Total de Vendas por Estado", x = "Estado", y = "Total de Vendas (R$)") +
+  theme_minimal() +
+  theme(legend.position = "none")  
+
+```
+
+### Lojas que mais venderam em um total de cada estado comparadas
+
+```{r}
+
+# Extraindo a primeira linha de cada DataFrame
+
+first_trans_mg <- data_mg %>% slice(1)
+first_trans_rj <- data_rj %>% slice(1)
+first_trans_sp <- data_sp %>% slice(1)
+first_trans_sc <- data_sc %>% slice(1)
+first_trans_pr <- data_pr %>% slice(1)
+first_trans_rs <- data_rs %>% slice(1)
+
+
+# Combinando as primeiras transações em um único DataFrame
+
+first_trans_all <- bind_rows(first_trans_mg, first_trans_rj, first_trans_sp, first_trans_sc, first_trans_pr, first_trans_rs)
+
+# Criando o gráfico de barras
+
+ggplot(first_trans_all, aes(x = cod_loja, y = preco, fill = estado)) +
+  geom_col() +
+  labs(title = "Primeira Transação por Estado", x = "Loja", y = "Valor da Transação (R$)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "bottom")
+
+```
+
+### Análise de correlação
+
+```{r}
+
+numeric_data <- data %>%
+  select(quantidade, preco)  
+
+# Calculando a matriz de correlação
+
+cor_matrix <- cor(numeric_data)
+
+# Visualizando a matriz de correlação
+
+corrplot(cor_matrix, method = "circle", type = "upper", order = "hclust",
+         tl.col = "black", tl.srt = 45, 
+         addCoef.col = "black") 
+
+```
+
+Há uma relação entre preço e quantidade.
+
+## 5. Análise multivariada
+
+### PCA
+
+```{r}
+pca_result <- prcomp(numeric_data, scale. = TRUE)
+
+# Visualizando o resumo dos resultados do PCA
+
+summary(pca_result)
+
+```
+
+```{r}
+
+plot(pca_result, type = "l", main = "Plot PCA")
+
+```
+
+O primeiro componente principal é dominante tendo 67% de proporção cumulativa, indicando que uma única dimensão é suficiente para capturar a maior parte da informação nos dados. Podendo assim, reduzir a dimensionalidade do dataframe.
+
+### Classificação das melhores lojas no mês atual
+
+```{r}
+
+data_maio <- dados1 %>%
+  filter(format(as.Date(data, format = "%Y-%m-%d"), "%Y-%m") == "2024-05")
+
+# Agrupar por loja e calcular a receita total
+
+ranking_lojas <- data_maio %>%
+  group_by(cod_loja) %>%
+  summarise(receita_total = sum(preco, na.rm = TRUE)) %>%
+  arrange(desc(receita_total))
+
+# Selecionar as 10 lojas com maior receita
+
+top_10_lojas <- head(ranking_lojas, 10)
+
+# Visualizar o resultado
+
+print(top_10_lojas)
+
+```
+
+```{r}
+
+ggplot(top_10_lojas, aes(x = reorder(cod_loja, receita_total), y = receita_total / 1000)) +
+  geom_col(aes(fill = cod_loja)) +  
+  labs(title = "Top 10 Lojas por Receita em Maio de 2024", x = "Loja", y = "Receita Total (Milhares de R$)") +
+  scale_y_continuous(labels = scales::comma) +  
+  
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+## 6. Conclusão e Discussão
+
+### Sumário das descobertas
+
+Através da análise exploratória realizada, pude identificar alguns padrões de vendas. Observei variações nas vendas entre os estados, que indicaram que fatores regionais podem desempenhar um papel crucial nos resultados comerciais. A distribuição de transações por faixas de preço mostrou que, embora a maioria das vendas ocorra em faixas intermediárias, existem transações de alto valor que merecem atenção especial. A relação entre o preço e a quantidade de produtos vendidos foi estatisticamente significativa, sugerindo uma dinâmica de preço-volume que pode ser explorada para otimizar as vendas. Além disso, a análise de componentes principais revelou a possibilidade de simplificação dos dados através da redução de sua dimensionalidade, o que facilita a interpretação e a modelagem dos dados. Por fim, fiz a identificação das lojas com as maiores receitas no mês de Maio, essa análise ofereceu uma visão clara dos pontos de força na rede de vendas.
+
+### Discussão sobre limitações e possíveis melhorias
+
+Uma limitação que pude perceber foi, por exemplo, a exclusão de variáveis potencialmente influentes, como detalhes de promoções/mudanças de preço ou localizações específicas das lojas, isso limitou um pouco uma análise mais profunda dos insights obtidos. Além disso, o foco em um único mês pode não capturar variações e tendências mais amplas que apenas análises de longo prazo poderiam revelar.
+
+Após recebermos os feedbacks dos parceiros, entendemos que para futuras análises uma possível melhoria seria expandir o conjunto de dados para incluir mais variáveis que possam enriquecer a análise, tais como: inclusão dos meses anteriores, metas de venda das lojas e datas comemorativas. Uma análise mais profunda poderia ajudar a identificar tendências sazonais e padrões de longo prazo nas vendas. A criação de modelos preditivos baseados nos dados atuais poderia facilitar a previsão de tendências futuras, auxiliando na tomada de decisões estratégicas mais informadas.

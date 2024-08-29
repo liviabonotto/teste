@@ -1,0 +1,309 @@
+---
+title: "Análise Exploratória - Comparação entre vendedores de diferentes lojas"
+author: "Daniel"
+date: "2024-08-08"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(plotly)
+library(corrplot)
+library(FactoMineR)
+library(factoextra)
+library(fastDummies)
+library(sqldf)
+library(readr)
+library(lubridate)
+library(dplyr)
+```
+
+# 
+
+# Análise Exploratória - Comparação de Lojas de Diferentes Regiões
+
+## Base de dados Employee
+
+### Carregar dataset
+
+```{r}
+employee_dataset <- read_csv(file = 'employee_final.csv',locale = locale(encoding = "Latin1"))
+head(employee_dataset)
+```
+
+### Análise exploratória
+
+#### Resumo Estatístico da Base
+
+```{r}
+summary(employee_dataset)
+```
+
+#### Estrutura da base 
+
+```{r}
+str(employee_dataset)
+```
+
+#### Contagem de nulos na base de dados
+
+```{r}
+sapply(employee_dataset, function(x) sum(is.na(x)))
+```
+
+#### Transformar Coluna em Tipo Date
+
+```{r}
+employee_dataset$initial_date <- as.Date(employee_dataset$initial_date, format = "%d/%m/%Y")
+
+employee_dataset$end_date <- as.Date(employee_dataset$end_date, format = "%d/%m/%Y")
+```
+
+## Base de dados Lojas
+
+### Análise Exploratória
+
+```{r}
+store <- read.csv(file = 'store_final.csv')
+head(store)
+```
+
+#### Resumo Estatístico da Base
+
+```{r}
+summary(store)
+```
+
+#### Estrutura da base 
+
+```{r}
+str(store)
+```
+
+#### Contagem de nulos na base de dados
+
+```{r}
+sapply(store, function(x) sum(is.na(x)))
+```
+
+#### Transformar Coluna em Tipo Date
+
+```{r}
+store$data_inauguracao <- as.Date(store$data_inauguracao, format = "%d/%m/%Y")
+```
+
+## Base de dados Transações
+
+### Análise Exploratória
+
+```{r}
+dataset_2024 <- read.csv(file = 'transaction_fact_v3_2024.csv')
+head(dataset_2024)
+```
+
+#### Resumo Estatístico da Base
+
+```{r}
+summary(dataset_2024)
+```
+
+#### Estrutura da base 
+
+```{r}
+str(dataset_2024)
+```
+
+#### Contagem de nulos na base de dados
+
+```{r}
+sapply(dataset_2024, function(x) sum(is.na(x)))
+```
+
+#### Transformar Coluna em Tipo Date
+
+```{r}
+dataset_2024$data <- as.Date(dataset_2024$data, format = "%Y-%m-%d")
+
+
+
+```
+
+## União das bases de dados 
+
+```{r}
+dataset_final <- sqldf("
+  SELECT 
+    t.data,
+    t.cod_vendedor,
+    CONCAT(e.name,' ',e.surname) AS nome_vendedor,
+    e.status AS status_vendedor,
+    e.role AS role_vendedor,
+    t.cod_loja,
+    t.cod_transacao,
+    t.quantidade,
+    t.cod_prod,
+    t.preco,
+    s.regiao,
+    s.diretoria
+    
+  FROM dataset_2024 t
+  LEFT JOIN store s
+  ON t.cod_loja = s.nome_loja
+  LEFT JOIN employee_dataset e
+  ON t.cod_vendedor = e.id_employee
+  ORDER BY 
+    t.cod_transacao
+")
+dataset_final
+```
+
+#### Análise da Quantidade de Produtos Vendidos por Região e Diretoria
+
+```{r}
+
+
+dataset_maio <- dataset_final %>%
+  filter(month(data) == 5 & year(data) == 2024)
+
+
+media_produtos_por_diretoria <- dataset_maio %>%
+  group_by(diretoria) %>%
+  summarise(media_quantidade = sum(quantidade, na.rm = TRUE) / 1000) %>%
+  ungroup()
+
+
+grafico_diretoria <- ggplot(media_produtos_por_diretoria, aes(y = media_quantidade, x = diretoria, fill = diretoria)) + 
+    geom_bar(stat = "identity") +
+    labs(title = "Produtos Vendidos por Diretoria (Maio de 2024)",
+         x = "Diretoria", y = "Produtos Vendidos - Valores em Milhares") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set1")
+
+media_produtos_por_regiao <- dataset_maio %>%
+  group_by(regiao, diretoria) %>%
+  summarise(media_quantidade = sum(quantidade, na.rm = TRUE) / 1000) %>%
+  ungroup()
+
+grafico_regiao <- ggplot(media_produtos_por_regiao, aes(fill = diretoria, y = regiao, x = media_quantidade)) + 
+    geom_bar(position = "stack", stat = "identity") +
+    labs(title = "Produtos Vendidos por Região (Maio de 2024)",
+         x = "Produtos Vendidos - Valores em Milhares", y = "Região") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set1")
+
+print(grafico_diretoria)
+print(grafico_regiao)
+```
+
+#### Análise de Faturamento por Região e Diretoria
+
+```{r}
+dataset_maio <- dataset_final %>%
+  filter(month(data) == 5 & year(data) == 2024)
+
+
+media_produtos_por_diretoria <- dataset_maio %>%
+  group_by(diretoria) %>%
+  summarise(media_quantidade =  sum(preco, na.rm = TRUE) / 1000) %>%
+  ungroup()
+
+
+
+grafico_diretoria <- ggplot(media_produtos_por_diretoria, aes(y = media_quantidade, x = diretoria, fill = diretoria)) + 
+    geom_bar(stat = "identity") +
+    labs(title = "Faturamento por Diretoria (Maio de 2024)",
+         x = "Diretoria", y = "Faturamento - Em Milhares de R$") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set1")
+
+media_produtos_por_regiao <- dataset_maio %>%
+  group_by(regiao, diretoria) %>%
+  summarise(media_quantidade =  sum(preco, na.rm = TRUE) / 1000) %>%
+  ungroup()
+
+
+grafico_regiao <- ggplot(media_produtos_por_regiao, aes(fill = diretoria, y = regiao, x = media_quantidade)) + 
+    geom_bar(position = "stack", stat = "identity") +
+    labs(title = "Faturamento por Região (Maio de 2024)",
+         x = "Faturamento - Em Milhares de R$", y = "Região") +
+    theme_minimal() +
+    scale_fill_brewer(palette = "Set1")
+
+print(grafico_diretoria)
+print(grafico_regiao)
+```
+
+#### Ticket Médio Distribuido por Região e Diretoria
+
+```{r}
+faturamento_por_transacao <- dataset_maio %>%
+  group_by(cod_transacao, regiao, diretoria) %>%
+  summarise(
+    faturamento_transacao = sum(preco, na.rm = TRUE) 
+  ) %>%
+  ungroup()
+
+ticket_medio_regiao_diretoria <- faturamento_por_transacao %>%
+  group_by(regiao, diretoria) %>%
+  summarise(
+    ticket_medio = mean(faturamento_transacao, na.rm = TRUE)  
+  ) %>%
+  ungroup()
+
+print(faturamento_por_transacao)
+
+grafico_ticket_medio <- ggplot(ticket_medio_regiao_diretoria, aes(x = ticket_medio, y = regiao, fill = diretoria)) + 
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +  
+  labs(title = "Ticket Médio por Região e Diretoria (Maio de 2024)",
+       x = "Ticket Médio (R$)", y = "Região") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1") +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.05)))  
+
+print(grafico_ticket_medio)
+
+```
+
+#### Análise para Verificar se o Gerente possui Vendas
+
+```{r}
+df_maio <- dataset_final %>%
+  filter(month(data) == 5 & year(data) == 2024)  # Filtrando para maio de 2024
+
+# Agrupar por role_vendedor e calcular a média da quantidade vendida
+df_maio_avg <- df_maio %>%
+  group_by(role_vendedor) %>%
+  summarise(media_quantidade_vendida = sum(quantidade, na.rm = TRUE)/1000)
+
+# Gerar gráfico de barras
+ggplot(df_maio_avg, aes(x = role_vendedor, y = media_quantidade_vendida, fill = role_vendedor)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Produtos Vendidos por Tipo de Vendedor - Maio de 2024",
+       x = "Tipo de Vendedor",
+       y = "Produtos Vendidos (Em milhares)") +
+  theme_minimal()
+```
+
+## Conclusão
+
+### Descobertas
+
+Para realizar a atividade, foi feita uma análise das bases de dados employee_final.csv, store_final.csv e transaction_fact_v3_2024.csv. Nas primeiras etapas, utilizamos funções como str e summary para reconhecimento das tabelas. Essas funções revelaram que a maioria das colunas está no formato chr, com exceção da coluna id_employee do primeiro dataset, e das colunas cod_vendedor e quantidade do último dataset, que são do tipo int. Além disso, as colunas preco e cod_prod, também do último dataset, são do tipo numérico.
+
+Ao examinar as tabelas, percebi que as colunas de datas estavam no formato chr, então as converti para o formato date para melhorar as visualizações durante a análise.
+
+As análises revelaram que a diretoria da Grande São Paulo e todas as regiões de São Paulo apresentaram os melhores números, tanto em termos de quantidade de produtos vendidos quanto de faturamento.
+
+Contudo, ao observar o ticket médio, nota-se que, apesar das vendas serem maiores na região de São Paulo, o ticket médio se mantém estável em todas as regiões, sugerindo uma similaridade no perfil dos clientes em diferentes áreas.
+
+### Discussões
+
+As análises geradas abrem discussões sobre a importância de disponibilizar essas visualizações para vendedores e gerentes de lojas. Uma provocação que a análise traz é a possibilidade de desenvolver visualizações voltadas para o nível gerencial da empresa, auxiliando nas tomadas de decisão.
+
+Outro ponto de discussão levantado pela análise foi a verificação de vendas realizadas por gerentes. Os dados mostram que apenas os vendedores estão efetuando vendas. No entanto, essa conclusão só foi possível após a correção das bases de dados, pois, anteriormente, analisávamos dados que indicavam vendas feitas por gerentes. Com essa atualização, os dados passaram a fazer mais sentido, eliminando a complexidade de incluir comissões de vendas para os gerentes, o que simplifica o cálculo da remuneração.
