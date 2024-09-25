@@ -1,5 +1,6 @@
 from botocore.exceptions import NoCredentialsError, ClientError
 from dotenv import load_dotenv
+from prefect import task
 
 import os
 import boto3
@@ -12,7 +13,7 @@ session = boto3.Session(
     aws_secret_access_key=os.getenv('AWS_SECRET_KEY_ID'),
     aws_session_token=os.getenv('AWS_SESSION_TOKEN'),
     region_name='us-east-1'
-)
+)   
 
 s3_client = session.client('s3')
 bucket_name = os.getenv('BUCKET_NAME')
@@ -36,6 +37,7 @@ def create_bucket_if_not_exists(bucket_name):
         logger.error(f"Erro inesperado ao criar bucket '{bucket_name}': {e}", exc_info=True)
         raise RuntimeError(f"Erro ao criar bucket '{bucket_name}'") from e
 
+@task
 def list_s3_files(prefix):
     try:
         response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
@@ -49,6 +51,7 @@ def list_s3_files(prefix):
         logger.error(f"Erro inesperado ao listar arquivos no bucket '{bucket_name}': {e}", exc_info=True)
         raise RuntimeError(f"Erro ao listar arquivos no bucket '{bucket_name}'") from e
 
+@task
 def download_s3_file(s3_key, local_path):
     try:
         s3_client.download_file(bucket_name, s3_key, local_path)
@@ -66,6 +69,7 @@ def download_s3_file(s3_key, local_path):
         logger.error(f"Erro inesperado ao baixar o arquivo '{s3_key}': {e}", exc_info=True)
         raise RuntimeError(f"Erro ao baixar o arquivo '{s3_key}' do bucket '{bucket_name}'") from e
 
+@task
 def upload_s3_file(s3_key, file_name):
     try:
         s3_client.upload_file(file_name, bucket_name, s3_key)

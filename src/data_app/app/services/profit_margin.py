@@ -1,7 +1,8 @@
+from services.clickhouse_client_service import fetch_margin_data
 from services.utils_service import convert_csv_to_parquet, create_custom_temp_dir, get_csv_encoding, get_csv_separator
 from services.s3_client_service import download_s3_file, list_s3_files
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 from services.logging_service import send_log_to_elasticsearch
 
 import pandas as pd
@@ -113,17 +114,28 @@ def transform_margin_data():
     finally:
         send_log_to_elasticsearch(log_message, "get_similar_product", status_code)
 
-def get_similar_product(description_input, merged_dataset):
+model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+
+def get_similar_product(product_input, merged_dataset):
     log_message = []
 
     try:
-        vectorizer = TfidfVectorizer(stop_words='english')
-        vectors_description = vectorizer.fit_transform(merged_dataset['descricao'])
-        logger.info("Vetores de descrição criados com sucesso.")
-        log_message.append("Vetores de descrição criados com sucesso. \n")
+        merged_dataset['combined'] = merged_dataset.apply(
+            lambda row: f"{row['descricao']} {row['categoria']} {row['sub_categoria']} {row['marca']}", axis=1
+        )
 
-        input_vector = vectorizer.transform([description_input])
-        similarities = cosine_similarity(input_vector, vectors_description).flatten()
+        product_data_combined = merged_dataset['combined'].tolist()
+        combined_embeddings = model.encode(product_data_combined, convert_to_tensor=True)
+        logger.info("Embeddings das descrições combinadas gerados com sucesso.")
+        log_message.append("Embeddings das descrições combinadas gerados com sucesso. \n")
+
+        input_combined = f"{product_input['descricao']} {product_input['categoria']} {product_input['subcategoria']} {product_input['marca']}"
+
+        input_embedding = model.encode([input_combined], convert_to_tensor=True)
+        logger.info("Embedding da combinação de entrada gerado com sucesso.")
+        log_message.append("Embedding da combinação de entrada gerado com sucesso. \n")
+
+        similarities = cosine_similarity(input_embedding, combined_embeddings).flatten()
         logger.info("Similaridades calculadas com sucesso.")
         log_message.append("Similaridades calculadas com sucesso. \n")
 
@@ -135,7 +147,7 @@ def get_similar_product(description_input, merged_dataset):
         log_message.append("Produtos similares ordenados com sucesso. \n")
         status_code = 200
 
-        return ordered_products[['cod_prod', 'descricao', 'margem_lucro_bruto', 'similaridade']]
+        return ordered_products[['cod_prod', 'descricao', 'categoria', 'sub_categoria', 'marca', 'margem_lucro_bruto', 'similaridade', 'preco', 'nome_completo']]
     
     except Exception as e:
         logger.error(f"Erro ao buscar produtos similares: {e}", exc_info=True)
@@ -147,9 +159,24 @@ def get_similar_product(description_input, merged_dataset):
     finally:
         send_log_to_elasticsearch(log_message, "get_similar_product", status_code)
     
-def get_similar_product_by_margin(description_input):
+def get_similar_product_by_margin_from_bronze(description_input, max_price, min_price):
     try:
         merged_dataset = transform_margin_data()
+
+        filtered_products = merged_dataset[
+            (merged_dataset['preco'] >= min_price) & 
+            (merged_dataset['preco'] <= max_price)
+        ]
+
+        return get_similar_product(description_input, filtered_products)
+
+    except Exception as e:
+        logger.error(f"Erro ao processar o produto por margem: {e}", exc_info=True)
+        raise RuntimeError(f"Erro ao processar o produto por margem: {str(e)}")
+    
+def get_similar_product_by_margin_from_silver(description_input):
+    try:
+        merged_dataset = fetch_margin_data()
 
         return get_similar_product(description_input, merged_dataset)
 

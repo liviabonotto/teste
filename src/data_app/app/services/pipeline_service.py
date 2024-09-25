@@ -4,6 +4,7 @@ from services.data_processing_service import prepare_dataframe_for_insert
 from services.utils_service import create_custom_temp_dir, convert_csv_to_parquet, get_table_name_from_filename, get_csv_encoding, get_csv_separator
 from services.s3_client_service import list_s3_files, download_s3_file, upload_s3_file
 from services.logging_service import send_log_to_elasticsearch
+from prefect import flow
 
 import os
 import logging
@@ -12,6 +13,7 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@flow
 def process_data_from_s3():
     log_message = []
 

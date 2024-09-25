@@ -1,5 +1,6 @@
 from dotenv import load_dotenv 
 from services.logging_service import send_log_to_elasticsearch
+from prefect import task
 
 import clickhouse_connect
 import os
@@ -49,6 +50,7 @@ def execute_sql_script(script_path):
         logger.error(f"Erro ao executar script SQL: {str(e)}", exc_info=True)
         raise RuntimeError("Falha ao executar o script SQL") from e
 
+@task
 def insert_dataframe(client, table_name, df):
     try:
         client.insert_df(table_name, df)
@@ -57,66 +59,6 @@ def insert_dataframe(client, table_name, df):
     except Exception as e:
         logger.error(f"Erro ao inserir dataframe na tabela {table_name}: {str(e)}", exc_info=True)
         raise RuntimeError(f"Falha ao inserir dados na tabela {table_name}") from e
-
-def fetch_cost_data():
-    log_message = []
-    try:
-        client = get_client()
-        log_message.append("Conexão com o ClickHouse estabelecida com sucesso. \n")
-
-        query = "SELECT * FROM cost_view"
-        
-        result = client.query(query)
-        log_message.append(f"Query executada: {query} \n")
-        
-        df = pd.DataFrame(result.result_rows, columns=result.column_names)
-        
-        client.close()
-        logger.info("Dados de custo buscados com sucesso.")
-        log_message.append("Dados de custo buscados com sucesso. \n")
-        
-        status_code = 200
-        return df
-
-    except Exception as e:
-        logger.error(f"Erro ao buscar dados de custo: {str(e)}", exc_info=True)
-        log_message.append(f"Erro ao buscar dados de custo: {str(e)} \n")
-
-        status_code = 500
-        raise RuntimeError("Falha ao buscar dados de custo") from e
-
-    finally:
-        send_log_to_elasticsearch(log_message, "fetch_cost_data", status_code)
-
-def fetch_price_data():
-    log_message = []
-    try:
-        client = get_client()
-        log_message.append("Conexão com o ClickHouse estabelecida com sucesso. \n")
-
-        query = "SELECT * FROM price_view"
-        
-        result = client.query(query)
-        log_message.append(f"Query executada: {query} \n")
-        
-        df = pd.DataFrame(result.result_rows, columns=result.column_names)
-        
-        client.close()
-        logger.info("Dados de preço buscados com sucesso.")
-        log_message.append("Dados de preço buscados com sucesso. \n")
-        
-        status_code = 200
-        return df
-
-    except Exception as e:
-        logger.error(f"Erro ao buscar dados de preço: {str(e)}", exc_info=True)
-        log_message.append(f"Erro ao buscar dados de preço: {str(e)} \n")
-
-        status_code = 500
-        raise RuntimeError("Falha ao buscar dados de preço") from e
-    
-    finally:
-        send_log_to_elasticsearch(log_message, "fetch_price_data", status_code)
     
 def fetch_store_regions_data():
     log_message = []
@@ -177,3 +119,93 @@ def fetch_margin_data():
     
     finally:
         send_log_to_elasticsearch(log_message, "fetch_margin_data", status_code)
+
+def get_product_categories():
+    log_message = []
+    try:
+        client = get_client()
+        log_message.append("Conexão com o ClickHouse estabelecida com sucesso. \n")
+
+        query = "SELECT DISTINCT categoria FROM product_view;"
+        
+        result = client.query(query)
+        log_message.append(f"Query executada: {query} \n")
+        
+        categories = [row[0] for row in result.result_rows]
+        
+        client.close()
+        logger.info("Categorias de produto buscadas com sucesso.")
+        log_message.append("Categorias de produto buscadas com sucesso. \n")
+        
+        status_code = 200
+        return categories
+
+    except Exception as e:
+        logger.error(f"Erro ao buscar categorias de produto: {str(e)}", exc_info=True)
+        log_message.append(f"Erro ao buscar categorias de produto: {str(e)} \n")
+
+        status_code = 500
+        raise RuntimeError("Falha ao buscar categorias de produto") from e
+    
+    finally:
+        send_log_to_elasticsearch(log_message, "get_product_categories", status_code)
+
+def get_product_subcategories():
+    log_message = []
+    try:
+        client = get_client()
+        log_message.append("Conexão com o ClickHouse estabelecida com sucesso. \n")
+
+        query = "SELECT DISTINCT sub_categoria FROM product_view;"
+        
+        result = client.query(query)
+        log_message.append(f"Query executada: {query} \n")
+        
+        subcategories = [row[0] for row in result.result_rows]
+        
+        client.close()
+        logger.info("Subcategorias de produto buscadas com sucesso.")
+        log_message.append("Subcategorias de produto buscadas com sucesso. \n")
+        
+        status_code = 200
+        return subcategories
+
+    except Exception as e:
+        logger.error(f"Erro ao buscar subcategorias de produto: {str(e)}", exc_info=True)
+        log_message.append(f"Erro ao buscar subcategorias de produto: {str(e)} \n")
+
+        status_code = 500
+        raise RuntimeError("Falha ao buscar subcategorias de produto") from e
+    
+    finally:
+        send_log_to_elasticsearch(log_message, "get_product_subcategories", status_code)
+
+def get_product_brands():
+    log_message = []
+    try:
+        client = get_client()
+        log_message.append("Conexão com o ClickHouse estabelecida com sucesso. \n")
+
+        query = "SELECT DISTINCT marca FROM product_view;"
+        
+        result = client.query(query)
+        log_message.append(f"Query executada: {query} \n")
+        
+        brands = [row[0] for row in result.result_rows]
+        
+        client.close()
+        logger.info("Marcas de produto buscadas com sucesso.")
+        log_message.append("Marcas de produto buscadas com sucesso. \n")
+        
+        status_code = 200
+        return brands
+
+    except Exception as e:
+        logger.error(f"Erro ao buscar marcas de produto: {str(e)}", exc_info=True)
+        log_message.append(f"Erro ao buscar marcas de produto: {str(e)} \n")
+
+        status_code = 500
+        raise RuntimeError("Falha ao buscar marcas de produto") from e
+    
+    finally:
+        send_log_to_elasticsearch(log_message, "get_product_brands", status_code)

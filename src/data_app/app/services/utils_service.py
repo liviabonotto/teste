@@ -2,19 +2,22 @@ import os
 import chardet
 import pandas as pd
 from collections import Counter
+from prefect import task
 
+@task
 def create_custom_temp_dir():
     temp_dir = "temporary"
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
     return temp_dir
 
-
+@task
 def get_csv_encoding(csv_file_path):
     with open(csv_file_path, 'rb') as f:
         rawdata = f.read(10000)
     return chardet.detect(rawdata)['encoding']
 
+@task
 def get_csv_separator(csv_file_path, encoding):
     seps = [',', ';', '\t', '|']
 
@@ -24,6 +27,7 @@ def get_csv_separator(csv_file_path, encoding):
     seps_count = count.most_common(1)[0][0]
     return seps_count
 
+@task
 def convert_csv_to_parquet(csv_file_path, encoding, sep, parquet_file_path=None):
     df = pd.read_csv(csv_file_path, encoding=encoding , sep=sep)
 
@@ -35,6 +39,7 @@ def convert_csv_to_parquet(csv_file_path, encoding, sep, parquet_file_path=None)
 
     return parquet_file_path, parquet_file_name
 
+@task
 def get_table_name_from_filename(filename):
     basename = os.path.basename(filename)
     table_name = os.path.splitext(basename)[0]

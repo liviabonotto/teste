@@ -1,4 +1,5 @@
 from datetime import datetime
+from prefect import task
 
 import pandas as pd
 import pyarrow as pa
@@ -20,6 +21,7 @@ def process_data(data):
         logger.error(f"Erro ao processar os dados: {str(e)}", exc_info=True)
         return None
 
+@task
 def prepare_dataframe_for_insert(df, tag):
     try:
         df['ingestion_date'] = datetime.now()

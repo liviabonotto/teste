@@ -19,11 +19,27 @@ services:
     environment:
       - FLASK_ENV=development
       - CLICKHOUSE_HOST=clickhouse
+      - PREFECT_API_URL=http://prefect:4200/api
     depends_on:
       - clickhouse
       - elasticsearch
     volumes:
       - ./app:/app
+    restart: always
+  
+  prefect:
+    build: .
+    command: poetry run prefect server start --host 0.0.0.0
+    container_name: prefect
+    ports:
+      - "4200:4200"
+    environment:
+      - FLASK_ENV=development
+      - PREFECT_API_URL=http://prefect:4200/api
+    depends_on:
+      - clickhouse
+      - elasticsearch
+      - flask-app
     restart: always
   
   streamlit-app:
