@@ -184,10 +184,14 @@ def load_data(file_name):
 
 def sugerir_substituto_com_estoque(cod_prod_informado, cod_loja):
     log_message = []
+    status_code = 500  # Inicializa status_code com 500, padrão para erros
 
     try:
         # Carregar datasets do S3
         prefix = os.getenv('PREFIX')
+        if not prefix:
+            raise ValueError("Prefixo do S3 não foi definido.")
+        
         logger.info(f"Prefixo obtido: {prefix}")
         log_message.append(f"Prefixo obtido: {prefix} \n")
 
@@ -197,6 +201,7 @@ def sugerir_substituto_com_estoque(cod_prod_informado, cod_loja):
 
         df_produtos, df_estoque = None, None
         
+        # Carregar os datasets de produtos e estoque
         for file_name in csv_files:
             try:
                 if 'sku_dataset.csv' in file_name:
@@ -220,6 +225,7 @@ def sugerir_substituto_com_estoque(cod_prod_informado, cod_loja):
         if produto_info.empty:
             logger.warning(f"Produto com código {cod_prod_informado} não encontrado.")
             log_message.append(f"Produto com código {cod_prod_informado} não encontrado. \n")
+            status_code = 404  # Produto não encontrado
             return "Produto não encontrado"
 
         # Extrair informações relevantes do produto informado
@@ -232,6 +238,7 @@ def sugerir_substituto_com_estoque(cod_prod_informado, cod_loja):
         if np.isnan(valor_ref):
             logger.warning(f"Conteúdo valor do produto {cod_prod_informado} não é numérico ou está faltando.")
             log_message.append(f"Conteúdo valor do produto {cod_prod_informado} não é numérico ou está faltando. \n")
+            status_code = 400  # Conteúdo valor inválido
             return "Conteúdo valor não é numérico ou está faltando"
 
         logger.info(f"Produto {cod_prod_informado} encontrado: {descricao}, categoria: {categoria}, subcategoria: {subcategoria}.")
@@ -249,6 +256,7 @@ def sugerir_substituto_com_estoque(cod_prod_informado, cod_loja):
         if produtos_potenciais.empty:
             logger.info(f"Nenhum produto substituto encontrado para o produto {cod_prod_informado}.")
             log_message.append(f"Nenhum produto substituto encontrado para o produto {cod_prod_informado}. \n")
+            status_code = 404
             return "Nenhum produto substituto encontrado"
 
         # Remover stop words da descrição
@@ -289,18 +297,30 @@ def sugerir_substituto_com_estoque(cod_prod_informado, cod_loja):
             if len(produtos_em_estoque) >= 3:
                 break
 
+        # Return the structure including `preco` and `margem_lucro_bruto` (mocked values)
         if not produtos_em_estoque.empty:
             logger.info(f"Produtos substitutos encontrados para o produto {cod_prod_informado}.")
             log_message.append(f"Produtos substitutos encontrados para o produto {cod_prod_informado}. \n")
             status_code = 200
             
-            # Return the mock structure including `preco` and `margem_lucro_bruto`
-            return produtos_em_estoque[['cod_prod', 'nome_completo', 'conteudo_valor', 'conteudo_medida', 'descricao', 'similaridade', 'preco', 'margem_lucro_bruto']]
+            # Format the output to match the required structure
+            resultado = []
+            for _, produto in produtos_em_estoque.iterrows():
+                resultado.append({
+                    "nome": produto['nome_completo'],  # Name of the product
+                    "id": produto['cod_prod'],         # Product ID
+                    "descricao": produto['descricao'], # Product description
+                    "preco": "R$ 50,00",               # Mocked price
+                    "margem": "25%"                    # Mocked margin
+                })
+            
+            return resultado
         else:
             logger.info(f"Nenhum produto substituto disponível em estoque para o produto {cod_prod_informado}.")
             log_message.append(f"Nenhum produto substituto disponível em estoque para o produto {cod_prod_informado}. \n")
             status_code = 200
             return "Nenhum produto substituto disponível em estoque"
+
 
     except Exception as e:
         logger.error(f"Erro ao sugerir substitutos: {e}", exc_info=True)

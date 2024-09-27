@@ -1,7 +1,7 @@
 import streamlit as st
 from services.subs_service import get_substitute_products
 
-# Custom CSS for button
+# Custom CSS for formatting
 st.markdown("""
     <style>
     .stButton button {
@@ -9,12 +9,26 @@ st.markdown("""
         background-color: #FF4B4B;
         color: white;
     }
+    div.product-card {
+        border: 1px solid #ddd;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        background-color: #262730;
+    }
+    h4.product-name {
+        font-weight: bold;
+    }
+    p.product-price, p.product-margin {
+        color: #32B950;
+        font-weight: bold;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # Page Title
 st.title("Sugestão de produtos")
-st.write("Informe o ID de um produto da compra para receber sugestão de um produto a ser vendido em conjunto, ou de um produto substituto.")
+st.write("Informe o ID de um produto e de uma loja para receber sugestões de produtos substitutos.")
 
 # Input Form with empty default values
 col1, col2 = st.columns(2)
@@ -26,32 +40,38 @@ with col2:
 # Button to Submit
 search = st.button("Enviar")
 
-# Validate inputs and process when the button is clicked
+# Process inputs and show results
 if search:
     if cod_prod and cod_loja:
         substitutos = get_substitute_products(cod_prod, cod_loja)
 
-        # Error handling for invalid product search
+        # Handle API response errors or invalid responses
         if isinstance(substitutos, str):
             st.error(substitutos)
-        elif substitutos:
-            # Show product info and sort options
-            order_by = st.selectbox("Ordenar por", ["Margem de lucro", "Preço"])
-            
-            if order_by == "Margem de lucro":
-                substitutos = sorted(substitutos, key=lambda x: x["margem_lucro_bruto"], reverse=True)
-            elif order_by == "Preço":
-                substitutos = sorted(substitutos, key=lambda x: x["preco"], reverse=True)
+        elif isinstance(substitutos, list):
+            # Ensure each item in the list is a dictionary before sorting
+            if all(isinstance(item, dict) for item in substitutos):
+                
+                # Sorting options
+                order_by = st.selectbox("Ordenar por", ["Margem de lucro", "Preço"])
 
-            # Displaying substitute products in the desired style
-            for product in substitutos:
-                st.markdown(f"""
-                <div style="border: 1px solid #ddd; padding: 10px; border-radius: 5px; margin-bottom: 10px; background-color: #262730;">
-                    <h4>{product['nome_completo']} - {product['cod_prod']}</h4>
-                    <p>{product['descricao']}</p>
-                    <p>Preço: <strong><span style="color: #32B950;">R$ {product['preco']:.2f}</span></strong> | Margem: <strong><span style="color: #32B950;">{product['margem_lucro_bruto']:.2f}%</span></strong></p>
-                </div>
-                """, unsafe_allow_html=True)
+                if order_by == "Margem de lucro":
+                    substitutos = sorted(substitutos, key=lambda x: x.get("margem", 0), reverse=True)
+                elif order_by == "Preço":
+                    substitutos = sorted(substitutos, key=lambda x: x.get("preco", 0), reverse=True)
+
+                # Display each product
+                for product in substitutos:
+                    st.markdown(f"""
+                    <div class="product-card">
+                        <h4 class="product-name">{product.get('nome', 'Sem nome')} - {product.get('id', 'Sem ID')}</h4>
+                        <p>{product.get('descricao', 'Sem descrição')}</p>
+                        <p>Preço: <span class="product-price">R$ {product.get('preco', 0):.2f}</span></p>
+                        <p>Margem: <span class="product-margin">{product.get('margem', 'Sem margem')}</span></p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.error("Os dados retornados não estão no formato correto.")
         else:
             st.write("Nenhum produto substituto encontrado.")
     else:

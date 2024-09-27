@@ -16,7 +16,18 @@ def get_substitute_products(cod_prod, cod_loja):
         if response.status_code == 200:
             try:
                 result = response.json()  # Attempt to parse JSON
-                # Add debugging print statements to see what response is coming from the API
+                
+                # Ensure the result is a list of dictionaries
+                if isinstance(result, list):
+                    for product in result:
+                        if isinstance(product, dict):
+                            # Mocking the price and margin fields
+                            product['preco'] = 50.00  # Mocked price
+                            product['margem'] = "25%"  # Mocked margin
+                        else:
+                            st.error(f"Unexpected product format: {product}")
+                            return []
+                
                 print(f"API Response: {result}")
                 return result
             except ValueError:
