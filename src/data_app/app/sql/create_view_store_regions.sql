@@ -14,7 +14,7 @@ WITH transaction_fact_v6_2024 AS (
 ),
 store_final AS (
     SELECT
-        trim(BOTH ' ' FROM JSONExtractString(line_data, 'nome_loja')) AS nome_loja, -- Remover espaços
+        trim(BOTH ' ' FROM JSONExtractString(line_data, 'nome_loja')) AS nome_loja, 
         trim(BOTH ' ' FROM JSONExtractString(line_data, 'regiao')) AS regiao,
         trim(BOTH ' ' FROM JSONExtractString(line_data, 'diretoria')) AS diretoria
     FROM working_data
@@ -22,7 +22,7 @@ store_final AS (
 ),
 employee_final AS (
     SELECT
-        trim(BOTH ' ' FROM JSONExtractString(line_data, 'name')) AS name, -- Remover espaços
+        trim(BOTH ' ' FROM JSONExtractString(line_data, 'name')) AS name, 
         trim(BOTH ' ' FROM JSONExtractString(line_data, 'surname')) AS surname,
         JSONExtractString(line_data, 'id_employee') AS cod_vendedor,
         trim(BOTH ' ' FROM JSONExtractString(line_data, 'role')) AS role_vendedor

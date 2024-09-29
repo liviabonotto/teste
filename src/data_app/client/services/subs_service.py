@@ -1,7 +1,7 @@
 import requests
 import streamlit as st
 
-API_BASE_URL = "http://flask-app:5000/"  # Adjust this as needed
+API_BASE_URL = "http://flask-app:5000/"  # Ajuste para o ambiente correto
 
 def get_substitute_products(cod_prod, cod_loja):
     payload = {
@@ -10,12 +10,21 @@ def get_substitute_products(cod_prod, cod_loja):
     }
 
     try:
+        #st.write("Payload enviado:", payload)  # Log do payload enviado
+
         response = requests.post(f"{API_BASE_URL}get_product_substitute", json=payload)
 
         # Check if response content is valid JSON
         if response.status_code == 200:
             try:
                 result = response.json()  # Attempt to parse JSON
+                
+                #st.write("Resposta recebida:", result)  # Log da resposta recebida
+
+                # Check if the response contains an error
+                if 'error' in result:
+                    st.error(result['error'])
+                    return []
                 
                 # Ensure the result is a list of dictionaries
                 if isinstance(result, list):
@@ -28,7 +37,6 @@ def get_substitute_products(cod_prod, cod_loja):
                             st.error(f"Unexpected product format: {product}")
                             return []
                 
-                print(f"API Response: {result}")
                 return result
             except ValueError:
                 st.error("Erro ao decodificar a resposta do servidor. Resposta não está em formato JSON.")

@@ -24,9 +24,9 @@ def get_product_substitute():
         # Call the service function to get product substitutes
         substitutos = sugerir_substituto_com_estoque(cod_prod_informado, cod_loja)
 
-        # Handle case where no substitutes are found (returns a string message)
+        # Modify this part to ensure a consistent JSON response:
         if isinstance(substitutos, str):
-            return jsonify({'message': substitutos}), 200
+            return jsonify({'error': substitutos}), 404  # Return a 404 when product is not found or no substitutes
 
         # Handle if substitutos is a list or dataframe
         if isinstance(substitutos, list):

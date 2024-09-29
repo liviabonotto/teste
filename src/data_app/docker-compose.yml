@@ -51,7 +51,7 @@ services:
       - ./client:/client
     environment:
       - CLICKHOUSE_HOST=clickhouse
-    command: ["poetry", "run", "streamlit", "run", "./client/app.py"]
+    command: ["poetry", "run", "streamlit", "run", "./client/Home.py"]
     depends_on:
       - clickhouse
       - elasticsearch

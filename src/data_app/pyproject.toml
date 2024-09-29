@@ -25,6 +25,8 @@ croniter = "^3.0.3"
 scikit-learn = "^1.5.1"
 plotly = "^5.24.0"
 prefect = "^3.0.2"
+auth0-python = "^4.7.2"
+requests = "^2.32.3"
 sentence-transformers = "^3.1.1"
 
 [build-system]

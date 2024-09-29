@@ -90,6 +90,36 @@ def fetch_store_regions_data():
     finally:
         send_log_to_elasticsearch(log_message, "fetch_store_regions_data", status_code)
 
+def fetch_revenue_data():
+    log_message = []
+    try:
+        client = get_client()
+        log_message.append("Conexão com o ClickHouse estabelecida com sucesso. \n")
+
+        query = "SELECT * FROM view_remuneracao_gerente"
+        
+        result = client.query(query)
+        log_message.append(f"Query executada: {query} \n")
+        
+        df = pd.DataFrame(result.result_rows, columns=result.column_names)
+        
+        client.close()
+        logger.info("Dados de receita buscados com sucesso.")
+        log_message.append("Dados de receita buscados com sucesso. \n")
+        
+        status_code = 200
+        return df
+
+    except Exception as e:
+        logger.error(f"Erro ao buscar dados de receita: {str(e)}", exc_info=True)
+        log_message.append(f"Erro ao buscar dados de receita: {str(e)} \n")
+
+        status_code = 500
+        raise RuntimeError("Falha ao buscar dados de receita") from e
+    
+    finally:
+        send_log_to_elasticsearch(log_message, "fetch_revenue_data", status_code)
+
 def fetch_margin_data():
     log_message = []
     try:
