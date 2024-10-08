@@ -2,7 +2,7 @@ import pytest
 from unittest import mock
 from botocore.exceptions import ClientError, NoCredentialsError
 import os
-from services.s3_client_service import create_bucket_if_not_exists, list_s3_files, download_s3_file, upload_s3_file
+from app.services.s3_client_service import create_bucket_if_not_exists, list_s3_files, download_s3_file, upload_s3_file
 
 def mock_aws_credentials():
     os.environ['AWS_ACCESS_KEY_ID'] = 'mock_access_key'

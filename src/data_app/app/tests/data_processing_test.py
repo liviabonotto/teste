@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 from unittest import mock
-from services.data_processing_service import process_data, prepare_dataframe_for_insert
+from app.services.data_processing_service import process_data, prepare_dataframe_for_insert
 
 def test_process_data_success(mocker):
     mock_data = {

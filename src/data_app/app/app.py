@@ -5,7 +5,7 @@ from controllers.view_controller import view_blueprint
 from services.clickhouse_client_service import execute_sql_script
 from services.cron_service import start_cron_job 
 from controllers.substitutes_controller import substitute_blueprint
-
+from controllers.cross_sell_controller import cross_sell_blueprint
 
 app = Flask(__name__)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
 
@@ -14,6 +14,7 @@ app.register_blueprint(pipeline_blueprint, url_prefix='/pipeline')
 app.register_blueprint(margin_blueprint, url_prefix='/margin')
 app.register_blueprint(view_blueprint, url_prefix='/view')
 app.register_blueprint(substitute_blueprint)
+app.register_blueprint(cross_sell_blueprint)
 
 
 if __name__ == '__main__':

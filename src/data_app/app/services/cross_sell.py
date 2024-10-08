@@ -119,11 +119,11 @@ def transform_cross_sell_data():
                     df_vendas = load_data(file_name)
                     logger.info(f"Arquivo {file_name} carregado com sucesso.")
                     log_message.append(f"Arquivo {file_name} carregado com sucesso. \n")
-                elif 'sku_dataset.csv' in file_name:  # Novo dataset adicionado
+                elif 'sku_dataset.csv' in file_name:  
                     df_produtos = load_data(file_name)
                     logger.info(f"Arquivo {file_name} carregado com sucesso.")
                     log_message.append(f"Arquivo {file_name} carregado com sucesso. \n")
-                elif 'sku_price.csv' in file_name:  # Novo dataset adicionado
+                elif 'sku_price.csv' in file_name:  
                     df_preco = load_data(file_name)
                     logger.info(f"Arquivo {file_name} carregado com sucesso.")
                     log_message.append(f"Arquivo {file_name} carregado com sucesso. \n")
@@ -151,7 +151,6 @@ def transform_cross_sell_data():
         df_cross_sell = df_pares_explodido.groupby(['prod1', 'prod2']).size().reset_index(name='frequency')
         merged_dataset = df_cross_sell.sort_values(by='frequency', ascending=False)
 
-        # Filtrar o preço mais recente para cada produto no df_preco
         df_preco_recente = df_preco.loc[df_preco.groupby('cod_prod')['data_fim'].idxmax()].reset_index(drop=True)
 
         logger.info("Datasets mesclados com sucesso.")
@@ -170,8 +169,8 @@ def transform_cross_sell_data():
     finally:
         send_log_to_elasticsearch(log_message, "transform_cross_sell_data", status_code)
 
-def get_similar_products_by(cod_loja, cod_produto):
-    logger.info("Entrou na função get_similar_products_by")
+def get_similar_products(cod_loja, cod_produto):
+    logger.info("Entrou na função get_similar_products")
 
     status_code = 200
 
@@ -185,4 +184,4 @@ def get_similar_products_by(cod_loja, cod_produto):
         raise RuntimeError(f"Erro ao processar o produto por cross-sell: {str(e)}")
     
     finally:
-        send_log_to_elasticsearch([], "get_similar_products_by", status_code)
+        send_log_to_elasticsearch([], "get_similar_products", status_code)

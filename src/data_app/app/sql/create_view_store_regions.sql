@@ -2,13 +2,9 @@ CREATE OR REPLACE VIEW region_view AS
 WITH transaction_fact_v6_2024 AS (
     SELECT
         toDateOrNull(JSONExtractString(line_data, 'data')) AS data, 
-        JSONExtractString(line_data, 'cod_vendedor') AS cod_vendedor,
         JSONExtractString(line_data, 'cod_loja') AS cod_loja,
         JSONExtractString(line_data, 'cod_transacao') AS cod_transacao,
-        JSONExtractString(line_data, 'cod_prod') AS cod_prod,
-        toInt32OrNull(JSONExtractString(line_data, 'quantidade')) AS quantidade, 
-        toFloat32OrNull(JSONExtractString(line_data, 'preco')) AS preco, 
-        toFloat32OrNull(JSONExtractString(line_data, 'total')) AS total 
+        toFloat32OrNull(JSONExtractString(line_data, 'preco')) AS preco
     FROM working_data
     WHERE tag = 'transaction_fact_v6_2024'
 ),
@@ -20,37 +16,32 @@ store_final AS (
     FROM working_data
     WHERE tag = 'store_final'
 ),
-employee_final AS (
+aggregated_data AS (
     SELECT
-        trim(BOTH ' ' FROM JSONExtractString(line_data, 'name')) AS name, 
-        trim(BOTH ' ' FROM JSONExtractString(line_data, 'surname')) AS surname,
-        JSONExtractString(line_data, 'id_employee') AS cod_vendedor,
-        trim(BOTH ' ' FROM JSONExtractString(line_data, 'role')) AS role_vendedor
-    FROM working_data
-    WHERE tag = 'employee_final'
+        sf.regiao AS regiao,
+        sf.diretoria AS diretoria,
+        formatDateTime(tf.data, '%Y-%m') AS mes,
+        SUM(tf.preco) AS faturamento_total,
+        COUNT(DISTINCT tf.cod_transacao) AS total_transacoes,
+        SUM(tf.preco) / COUNT(DISTINCT tf.cod_transacao) AS ticket_medio
+    FROM 
+        transaction_fact_v6_2024 tf
+    LEFT JOIN 
+        store_final sf
+    ON 
+        tf.cod_loja = sf.nome_loja
+    WHERE tf.preco IS NOT NULL
+    GROUP BY 
+        sf.regiao, sf.diretoria, formatDateTime(tf.data, '%Y-%m')
 )
 
 SELECT
-    CONCAT(ef.name, ' ', ef.surname) AS nome_vendedor, 
-    ef.role_vendedor AS role,
-    sf.nome_loja AS loja,
-    sf.regiao AS regiao,
-    sf.diretoria AS diretoria,
-    tf.data AS data,
-    tf.cod_vendedor AS cod_vendedor,
-    tf.cod_loja AS cod_loja,
-    tf.cod_transacao AS cod_transacao,
-    tf.cod_prod AS cod_prod,
-    tf.quantidade AS quantidade,
-    tf.preco AS preco,
-    tf.total AS total
+    regiao,
+    diretoria,
+    mes,
+    faturamento_total,
+    ticket_medio
 FROM 
-    transaction_fact_v6_2024 tf
-LEFT JOIN 
-    store_final sf
-ON 
-    tf.cod_loja = sf.nome_loja
-LEFT JOIN 
-    employee_final ef
-ON 
-    tf.cod_vendedor = ef.cod_vendedor;
+    aggregated_data
+ORDER BY 
+    mes, regiao, diretoria;

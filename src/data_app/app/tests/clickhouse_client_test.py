@@ -1,7 +1,7 @@
 import pytest
 from unittest import mock
 import os
-from services.clickhouse_client_service import get_client, execute_sql_script, insert_dataframe, fetch_cost_data, fetch_price_data
+from app.services.clickhouse_client_service import get_client, execute_sql_script, insert_dataframe
 
 def test_get_client_success(mocker):
     mock_get_client = mocker.patch('clickhouse_connect.get_client')
@@ -74,47 +74,3 @@ def test_insert_dataframe_failure(mocker):
 
     with pytest.raises(RuntimeError):
         insert_dataframe(mock_client, 'test_table', df)
-
-def test_fetch_cost_data_success(mocker):
-    mock_get_client = mocker.patch('clickhouse_connect.get_client')
-    mock_client = mock.Mock()
-    mock_get_client.return_value = mock_client
-
-    mock_query = mock.Mock()
-    mock_query.result_rows = [(1, 2), (3, 4)]
-    mock_query.column_names = ['col1', 'col2']
-    mock_client.query.return_value = mock_query
-
-    df = fetch_cost_data()
-
-    mock_client.query.assert_called_once_with("SELECT * FROM cost_view")
-    assert not df.empty
-
-def test_fetch_cost_data_failure(mocker):
-    mock_get_client = mocker.patch('clickhouse_connect.get_client')
-    mock_get_client.side_effect = Exception("Erro ao buscar dados")
-
-    with pytest.raises(RuntimeError):
-        fetch_cost_data()
-
-def test_fetch_price_data_success(mocker):
-    mock_get_client = mocker.patch('clickhouse_connect.get_client')
-    mock_client = mock.Mock()
-    mock_get_client.return_value = mock_client
-
-    mock_query = mock.Mock()
-    mock_query.result_rows = [(5, 6), (7, 8)]
-    mock_query.column_names = ['col3', 'col4']
-    mock_client.query.return_value = mock_query
-
-    df = fetch_price_data()
-
-    mock_client.query.assert_called_once_with("SELECT * FROM price_view")
-    assert not df.empty
-
-def test_fetch_price_data_failure(mocker):
-    mock_get_client = mocker.patch('clickhouse_connect.get_client')
-    mock_get_client.side_effect = Exception("Erro ao buscar dados")
-
-    with pytest.raises(RuntimeError):
-        fetch_price_data()

@@ -2,9 +2,9 @@ import requests
 import streamlit as st
 
 # Ajuste o endpoint conforme o ambiente (local ou em contêiner)
-API_BASE_URL = "http://flask-app:5000/pipeline/"  # Ajuste para o ambiente correto
+API_BASE_URL = "http://flask-app:5000/"  # Ajuste para o ambiente correto
 
-def get_similar_products_by(cod_loja, cod_prod):
+def get_similar_products(cod_loja, cod_prod):
     payload = {
         "cod_loja": cod_loja,
         "cod_prod": cod_prod

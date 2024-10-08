@@ -1,5 +1,5 @@
 import streamlit as st
-from services.cross_sell_service import get_similar_products_by
+from services.cross_sell_service import get_similar_products
 
 # Custom CSS para formatação (o mesmo que no substitutos.py)
 st.markdown("""
@@ -117,7 +117,7 @@ search = st.button("Enviar")
 # Processamento da entrada e exibição dos resultados
 if search:
     if cod_prod and cod_loja:
-        cross_sell_products = get_similar_products_by(cod_loja, cod_prod)
+        cross_sell_products = get_similar_products(cod_loja, cod_prod)
 
         # Simulando a recuperação das informações do produto
         if isinstance(cross_sell_products, list) and cross_sell_products:
@@ -148,7 +148,7 @@ if search:
             for product in cross_sell_products:
                 st.markdown(f"""
                 <div class="product-card">
-                    <h4 class="product-name">{product.get('nome', 'Sem nome')} - {product.get('cod_loja', 'Sem ID')}</h4>
+                    <h4 class="product-name">{product.get('nome', 'Sem nome')} - {product.get('recommendation', 'Sem ID')}</h4>
                     <p>{product.get('descricao', 'Sem descrição')}</p>
                     <p>Preço: <span class="product-price">R$ {product.get('preco', '0,00')}</span> | Frequência: <span class="product-margin">{product.get('frequency', 'Sem frequência')}</span></p>
             </div>

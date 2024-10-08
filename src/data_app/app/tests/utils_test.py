@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 import os
 from unittest import mock
-from services.utils_service import create_custom_temp_dir, convert_csv_to_parquet, get_table_name_from_filename
+from app.services.utils_service import create_custom_temp_dir, convert_csv_to_parquet, get_table_name_from_filename
 
 def test_create_custom_temp_dir(mocker):
     mock_exists = mocker.patch('os.path.exists')
